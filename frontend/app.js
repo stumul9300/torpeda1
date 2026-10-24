@@ -342,6 +342,7 @@ const KIND = {
   text: {},
   date: { valueFormatter: dateFmt, width: 100 },
   int: { valueFormatter: intFmt, type: "numericColumn", width: 115 },
+  num: { valueFormatter: (p) => (p.value === null || p.value === undefined || p.value === "" ? "" : Number(p.value).toLocaleString("ru-RU", { maximumFractionDigits: 1 })), type: "numericColumn", width: 115 },
   money: { valueFormatter: rub, type: "numericColumn", width: 135 },
   pct: { valueFormatter: pct, type: "numericColumn", width: 100 },
 };
@@ -349,9 +350,11 @@ const reportGrid = agGrid.createGrid(document.getElementById("grid-report"), {
   columnDefs: [],
   // cellDataType: false — иначе строка «Итого» в числовой колонке артикула показывается как ошибка
   defaultColDef: { sortable: true, filter: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true, cellDataType: false },
-  localeText: { ...RU, noRowsToShow: "Нет данных за эти даты. Загрузите финотчёты из WB." },
+  localeText: { ...RU, noRowsToShow: "Нет данных за эти даты. Загрузите их из WB кнопкой справа сверху." },
   getRowStyle: (p) => (p.node.rowPinned ? { fontWeight: 600 } : null),
+  onCellValueChanged: savePlanCell,
 });
+const ORDER_REPORTS = ["orders_sales", "buyout", "delivery_time", "spp", "abc", "plan_fact"];
 const reportFrom = document.getElementById("report-from");
 const reportTo = document.getElementById("report-to");
 const reportParams = () => {
@@ -364,7 +367,8 @@ const reportParams = () => {
 async function initReportDates() {
   if (reportFrom.value) return;
   const r = await api("GET", "/api/reports/range");
-  const to = r.date_to ? new Date(r.date_to) : new Date();
+  const last = [r.date_to, r.orders_to].filter(Boolean).sort().pop();
+  const to = last ? new Date(last) : new Date();
   const from = new Date(to);
   from.setDate(from.getDate() - 29);
   reportTo.value = to.toISOString().slice(0, 10);
@@ -374,6 +378,9 @@ async function initReportDates() {
 async function loadReport() {
   await initReportDates();
   const { name, q } = reportParams();
+  const isOrders = ORDER_REPORTS.includes(name);
+  document.getElementById("btn-orders-sync").hidden = !isOrders;
+  document.getElementById("btn-report-sync").hidden = isOrders && name !== "abc";
   setStatus("Считаю отчёт…");
   try {
     const data = await api("GET", `/api/reports/${name}?${q}`);
@@ -381,8 +388,9 @@ async function loadReport() {
       field: c.field,
       headerName: c.header,
       ...KIND[c.kind],
+      ...(c.editable ? { editable: (p) => !p.node.rowPinned, cellClass: "cell-edit", valueParser: (p) => (p.newValue === "" || p.newValue === null ? null : Number(String(p.newValue).replace(/\s/g, "").replace(",", "."))) } : {}),
       ...(c.kind === "text" ? { width: c.field === "reason" || c.field === "oper" ? 260 : 140 } : {}),
-      cellClass: c.field === "profit" || c.field === "profit_per_unit" ? signClass : undefined,
+      ...(c.field === "profit" || c.field === "profit_per_unit" ? { cellClass: signClass } : {}),
     })));
     reportGrid.setGridOption("rowData", data.rows);
     reportGrid.setGridOption("pinnedTopRowData", data.totals ? [data.totals] : []);
@@ -390,6 +398,28 @@ async function loadReport() {
     setStatus(`${data.title}: строк ${data.rows.length}`);
   } catch (err) {
     setStatus(err.message);
+  }
+}
+async function savePlanCell(e) {
+  if (!["plan_qty", "plan_revenue"].includes(e.colDef.field)) return;
+  const v = e.newValue;
+  if (v !== null && (Number.isNaN(v) || v < 0)) {
+    alert("План должен быть числом не меньше нуля.");
+    e.node.setDataValue(e.colDef.field, e.oldValue);
+    return;
+  }
+  const r = e.data;
+  try {
+    await api("PUT", "/api/plans", {
+      month: r.month,
+      nm_id: typeof r.nm_id === "number" ? r.nm_id : 0,
+      qty: r.plan_qty === null || r.plan_qty === undefined ? null : Math.round(r.plan_qty),
+      revenue: r.plan_revenue ?? null,
+    });
+    setStatus("План сохранён");
+    await loadReport();
+  } catch (err) {
+    alert(err.message);
   }
 }
 document.getElementById("btn-report").addEventListener("click", loadReport);
@@ -404,6 +434,24 @@ document.getElementById("btn-report-sync").addEventListener("click", async (e) =
   try {
     const res = await api("POST", "/api/wb/sync-report", { date_from: reportFrom.value, date_to: reportTo.value });
     setStatus(`Загружено строк финотчётов: ${res.rows}`);
+    await loadReport();
+  } catch (err) {
+    setStatus("");
+    alert(err.message);
+  } finally {
+    e.target.disabled = false;
+  }
+});
+
+document.getElementById("btn-orders-sync").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  const limit = new Date();
+  limit.setDate(limit.getDate() - 89);
+  const from = reportFrom.value && new Date(reportFrom.value) > limit ? reportFrom.value : limit.toISOString().slice(0, 10);
+  setStatus("Загружаю заказы и продажи из WB…");
+  try {
+    const res = await api("POST", "/api/wb/sync-orders", { date_from: from, date_to: reportTo.value || new Date().toISOString().slice(0, 10) });
+    setStatus(`Загружено: заказов ${res.orders}, продаж и возвратов ${res.sales}`);
     await loadReport();
   } catch (err) {
     setStatus("");

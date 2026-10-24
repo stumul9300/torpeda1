@@ -52,6 +52,24 @@
           <option value="penalties|">Штрафы и брак</option>
           <option value="deductions|">Прочие удержания</option>
         </optgroup>
+        <optgroup label="Заказы и продажи">
+          <option value="orders_sales|nm">Заказы и продажи по артикулам</option>
+          <option value="orders_sales|nm_size">Заказы и продажи по артикулам и размерам</option>
+          <option value="orders_sales|day">Заказы и продажи по дням</option>
+          <option value="orders_sales|warehouse">Заказы и продажи по складам</option>
+          <option value="orders_sales|region">Заказы и продажи по регионам</option>
+          <option value="buyout|nm">Процент выкупа по артикулам</option>
+          <option value="buyout|nm_size">Процент выкупа по артикулам и размерам</option>
+          <option value="buyout|warehouse">Процент выкупа по складам</option>
+          <option value="buyout|region">Процент выкупа по регионам</option>
+          <option value="delivery_time|nm">Время доставки по артикулам</option>
+          <option value="delivery_time|warehouse">Время доставки по складам</option>
+          <option value="delivery_time|region">Время доставки по регионам</option>
+          <option value="spp|day">Динамика СПП по дням</option>
+          <option value="spp|nm">Динамика СПП по артикулам</option>
+          <option value="abc|">ABC-анализ</option>
+          <option value="plan_fact|">План-факт</option>
+        </optgroup>
       </select>
       <label>с <input id="report-from" type="date"></label>
       <label>по <input id="report-to" type="date"></label>
@@ -59,6 +77,7 @@
       <button id="btn-report-xlsx">Скачать в Excel</button>
       <span class="spacer"></span>
       <button id="btn-report-sync" title="WB отдаёт финотчёты медленно, за год это может занять несколько минут">Загрузить финотчёты из WB за эти даты</button>
+      <button id="btn-orders-sync" title="WB хранит заказы только за последние 90 дней">Загрузить заказы и продажи из WB</button>
     </div>
     <p class="hint" id="report-notes"></p>
     <div id="grid-report" class="ag-theme-quartz grid"></div>
