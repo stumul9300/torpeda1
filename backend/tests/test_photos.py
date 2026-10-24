@@ -33,3 +33,10 @@ def test_products_have_last_spp(api):
     api.post("/api/wb/sync")
     row = api.get("/api/products").json()[0]
     assert float(row["spp"]) == 29
+
+
+def test_sync_spp_button(api):
+    api.post("/api/wb/sync")
+    assert api.post("/api/wb/sync-spp").json()["orders"] >= 1
+    row = api.get("/api/products").json()[0]
+    assert row["spp_at"]

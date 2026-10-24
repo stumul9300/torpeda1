@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -158,19 +158,26 @@ def _result_dict(ctx: Context, r: UnitResult) -> dict:
     return {**rr.__dict__, "status": status(ctx, r)}
 
 
-def last_spp(s: Session) -> dict[int, Decimal]:
-    """Последняя известная СПП по артикулу: из самого свежего заказа без отмены, где WB её указал."""
+def spp_from_orders(s: Session) -> dict[int, tuple[Decimal, datetime]]:
+    """СПП из самого свежего заказа без отмены по каждому артикулу и время этого заказа.
+
+    WB отдаёт СПП только в уже сделанных заказах: у товара без свежих заказов значения нет."""
     q = (
-        select(Order.nm_id, Order.spp)
+        select(Order.nm_id, Order.spp, Order.date)
         .where(Order.account_id == ACC, Order.is_cancel.is_(False), Order.spp.is_not(None))
         .order_by(Order.date)
     )
-    return {nm: spp for nm, spp in s.execute(q)}
+    return {nm: (spp, at) for nm, spp, at in s.execute(q)}
+
+
+# Откуда брать СПП. Чтобы подключить более точный источник, достаточно заменить функцию:
+# она получает сессию и возвращает {артикул: (СПП в %, время значения)}.
+SPP_SOURCE = spp_from_orders
 
 
 def product_rows(s: Session) -> list[dict]:
     ctx = load_context(s)
-    spp = last_spp(s)
+    spp = SPP_SOURCE(s)
     prices = {p.nm_id: p for p in s.scalars(select(Price).where(Price.account_id == ACC))}
     stocks = {
         (nm, scheme): qty
@@ -196,7 +203,8 @@ def product_rows(s: Session) -> list[dict]:
             "cost": ctx.costs.get(p.nm_id),
             "price": price.price if price else None,
             "discount_pct": price.discount_pct if price else None,
-            "spp": spp.get(p.nm_id),
+            "spp": spp[p.nm_id][0] if p.nm_id in spp else None,
+            "spp_at": spp[p.nm_id][1] if p.nm_id in spp else None,
             "calc_price": price.calc_price if price else None,
             "calc_discount_pct": price.calc_discount_pct if price else None,
             "current": None,

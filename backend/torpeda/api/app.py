@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from functools import lru_cache
 from urllib.parse import quote
@@ -490,6 +490,13 @@ def wb_sync_services(req: PeriodRequest, client: WBClient = Depends(get_wb_clien
 def wb_sync_ads(req: PeriodRequest, client: WBClient = Depends(get_wb_client)) -> dict:
     """Реклама: статистика кампаний и списания. WB отдаёт статистику 3 раза в минуту."""
     return _analytics_sync("реклама", lambda s: sync_ads(client, s, req.date_from, req.date_to), "Продвижение")
+
+
+@app.post("/api/wb/sync-spp")
+def wb_sync_spp(client: WBClient = Depends(get_wb_client)) -> dict:
+    """Свежие заказы за последние сутки: из них берётся текущая СПП. Один запрос к WB (лимит — раз в минуту)."""
+    since = date.today() - timedelta(days=1)
+    return _analytics_sync("СПП", lambda s: {"orders": sync_orders(client, s, since)}, "Статистика")
 
 
 @app.post("/api/wb/sync-coefficients")

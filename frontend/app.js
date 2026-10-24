@@ -99,6 +99,21 @@ const photoCell = (p) => {
   return a;
 };
 
+// СПП меняется часто: показываем время значения, старше суток — серым с пометкой
+const sppCell = (p) => {
+  if (p.value == null) return "—";
+  const span = document.createElement("span");
+  const at = p.data.spp_at ? new Date(p.data.spp_at) : null;
+  const stale = !at || Date.now() - at.getTime() > 24 * 3600 * 1000;
+  const when = at ? at.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+  span.textContent = `${p.value.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
+  const small = document.createElement("small");
+  small.className = stale ? "spp-at stale" : "spp-at";
+  small.textContent = ` · ${when}${stale ? " устар." : ""}`;
+  span.append(small);
+  return span;
+};
+
 const productColumns = [
   { headerName: "Фото", field: "photo", pinned: "left", width: 64, sortable: false, filter: false, cellRenderer: photoCell },
   { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, pinned: "left", width: 120 },
@@ -116,7 +131,7 @@ const productColumns = [
       { headerName: "Цена до скидки", field: "price", width: 110, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Скидка", field: "discount_pct", width: 80, valueFormatter: pct, type: "numericColumn" },
       { headerName: "Цена продавца", field: "cur_seller_price", width: 110, valueFormatter: rub, type: "numericColumn" },
-      { headerName: "СПП", field: "spp", width: 70, valueFormatter: (p) => (p.value == null ? "—" : pct(p)), type: "numericColumn", headerTooltip: "Скидка постоянного покупателя из последнего заказа за загруженный период" },
+      { headerName: "СПП", field: "spp", width: 110, cellRenderer: sppCell, type: "numericColumn", headerTooltip: "СПП из самого свежего заказа и время этого заказа. WB отдаёт СПП только по сделанным заказам" },
       { headerName: "Цена с СПП", field: "buyer_price", width: 100, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn" },
       { headerName: "Комиссия", field: "cur_commission", width: 100, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Логистика", field: "cur_logistics", width: 100, valueFormatter: rub, type: "numericColumn" },
@@ -641,6 +656,33 @@ document.getElementById("btn-check").addEventListener("click", async () => {
     out.textContent = err.message;
   }
 });
+
+// «Обновить СПП»: свежие заказы за сутки. Галочка «каждый час» работает, пока программа открыта.
+async function syncSpp() {
+  setStatus("Обновляю СПП…");
+  try {
+    const res = await api("POST", "/api/wb/sync-spp");
+    await loadProducts();
+    setStatus(`СПП обновлена: заказов за сутки ${res.orders}`);
+  } catch (err) {
+    setStatus(`СПП: ${err.message}`);
+  }
+}
+document.getElementById("btn-spp").addEventListener("click", syncSpp);
+const sppHourly = document.getElementById("spp-hourly");
+let sppTimer = null;
+function setSppHourly(on) {
+  clearInterval(sppTimer);
+  sppTimer = on ? setInterval(syncSpp, 3600 * 1000) : null;
+  try {
+    localStorage.setItem("sppHourly", on ? "1" : "");
+  } catch {}
+}
+try {
+  sppHourly.checked = localStorage.getItem("sppHourly") === "1";
+} catch {}
+setSppHourly(sppHourly.checked);
+sppHourly.addEventListener("change", () => setSppHourly(sppHourly.checked));
 
 document.getElementById("btn-bulk-cost").addEventListener("click", () => {
   document.querySelector('.tab[data-tab="settings"]').click();
