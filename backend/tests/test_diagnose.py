@@ -51,8 +51,13 @@ def test_token_info_hides_ids():
     payload = {"exp": 4102444800, "s": (1 << 30) | 0b110, "acc": 1, "oid": 12345, "uid": 777, "t": False}
     body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
     info = token_info(f"aaa.{body}.sig")
-    assert info["ok"] is True
+    assert info["ok"] is False and "«Базовый»" in info["text"]
+    assert info["summary"][0] == "Тип ключа: Базовый"
+    assert "Категории: Контент, Аналитика" in info["summary"] and "Только чтение: да" in info["summary"]
     assert info["claims"]["oid"] == "скрыто" and info["claims"]["uid"] == "скрыто"
     assert info["claims"]["acc"] == 1 and "2100" in info["claims"]["exp"]
     assert "биты: 1, 2, 30" in info["claims"]["s"]
     assert token_info("not-a-jwt")["ok"] is False
+    personal = base64.urlsafe_b64encode(json.dumps({"acc": 3, "s": 2}).encode()).decode().rstrip("=")
+    info = token_info(f"aaa.{personal}.sig")
+    assert info["ok"] is True and info["summary"][0] == "Тип ключа: Персональный"

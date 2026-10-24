@@ -78,6 +78,13 @@ def check_stocks(client: WBClient) -> list[dict]:
     return out
 
 
+# Расшифровка по документации WB (dev.wildberries.ru, «Информация об API» → структура токена)
+TOKEN_TYPES = {1: "Базовый", 2: "Тестовый", 3: "Персональный", 4: "Сервисный"}
+TOKEN_CATEGORIES = {1: "Контент", 2: "Аналитика", 3: "Цены и скидки", 4: "Маркетплейс", 5: "Статистика",
+                    6: "Продвижение", 7: "Вопросы и отзывы", 9: "Чат с покупателями", 10: "Поставки",
+                    11: "Возвраты покупателями", 12: "Документы", 13: "Финансы", 16: "Пользователи"}  # fmt: skip
+READ_ONLY_BIT = 30
+
 # Поля ключа, которые не показываем: это номера кабинета, пользователя и самого ключа.
 HIDDEN_CLAIMS = {"id", "jti", "uid", "oid", "sid", "user", "seller"}
 
@@ -85,7 +92,7 @@ HIDDEN_CLAIMS = {"id", "jti", "uid", "oid", "sid", "user", "seller"}
 def token_info(token: str) -> dict:
     """Свойства ключа WB без самого ключа: WB-ключ — это JWT, его средняя часть читается без секрета.
 
-    Показываем как есть (без толкования), номера кабинета и пользователя скрываем."""
+    Показываем поля как есть и расшифровку словами; номера кабинета и пользователя скрываем."""
     parts = (token or "").split(".")
     if len(parts) != 3:
         return {"ok": False, "text": "Ключ не похож на ключ WB (ожидается три части через точку)."}
@@ -104,4 +111,18 @@ def token_info(token: str) -> dict:
         else:
             claims[k] = v
     expired = isinstance(payload.get("exp"), int | float) and payload["exp"] < datetime.now().timestamp()
-    return {"ok": not expired, "text": "Срок действия ключа истёк." if expired else "", "claims": claims}
+    kind = TOKEN_TYPES.get(payload.get("acc"), f"неизвестный (acc={payload.get('acc')})")
+    s = payload.get("s") if isinstance(payload.get("s"), int) else 0
+    summary = [f"Тип ключа: {kind}"]
+    if "exp" in claims:
+        summary.append(f"Действует до: {claims['exp']}" + (" — срок истёк" if expired else ""))
+    cats = [name for bit, name in TOKEN_CATEGORIES.items() if s >> bit & 1]
+    summary.append("Категории: " + (", ".join(cats) or "нет"))
+    summary.append("Только чтение: " + ("да" if s >> READ_ONLY_BIT & 1 else "нет"))
+    text = "Срок действия ключа истёк." if expired else ""
+    if payload.get("acc") == 1:
+        text = (
+            "Это «Базовый» ключ. WB не пускает его к быстрому методу остатков, поэтому Торпеда берёт остатки "
+            "запасным способом. Чтобы работало быстрее, создайте в кабинете WB ключ типа «Персональный»."
+        )
+    return {"ok": not expired and payload.get("acc") != 1, "text": text, "summary": summary, "claims": claims}
