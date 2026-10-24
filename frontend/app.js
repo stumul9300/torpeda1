@@ -420,6 +420,7 @@ async function loadSettings() {
   const s = await api("GET", "/api/settings");
   for (const [k, v] of Object.entries(s)) if (form.elements[k]) form.elements[k].value = v;
   showKeys(await api("GET", "/api/keys"));
+  loadSyncLog();
 }
 
 const keysForm = document.getElementById("keys-form");
@@ -490,6 +491,31 @@ document.getElementById("costs-file").addEventListener("change", async (e) => {
 
 api("GET", "/api/info").then((i) => {
   document.getElementById("data-dir").textContent = `Ключи, себестоимость и журнал цен хранятся в папке ${i.data_dir}. Обновление программы их не стирает.`;
+});
+
+// --- что пошло не так ---
+
+const esc = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+async function loadSyncLog() {
+  const rows = await api("GET", "/api/sync-log");
+  document.getElementById("sync-log").innerHTML = rows.length
+    ? rows.map((r) => `<tr><td>${r.ok ? "✅" : "❌"}</td><td>${esc(r.section)}</td><td>${new Date(r.at).toLocaleString("ru-RU")}</td><td>${esc(r.message)}</td></tr>`).join("")
+    : "<tr><td>Загрузок ещё не было. Нажмите «Загрузить из WB».</td></tr>";
+}
+document.getElementById("btn-sync-log").addEventListener("click", loadSyncLog);
+document.getElementById("btn-diagnose-stocks").addEventListener("click", async (e) => {
+  const out = document.getElementById("diagnose-result");
+  e.target.disabled = true;
+  out.textContent = "Спрашиваю WB…";
+  try {
+    const res = await api("GET", "/api/wb/diagnose/stocks");
+    out.innerHTML = res.map((r) => `<div class="diag ${r.rows ? "good" : "bad"}"><b>${esc(r.what)}</b>: ${esc(r.explanation)}
+      <pre>Запрос: ${esc(r.request)}\nОтвет WB (код ${r.status}): ${esc(r.answer) || "пусто"}</pre></div>`).join("");
+  } catch (err) {
+    out.textContent = err.message;
+  } finally {
+    e.target.disabled = false;
+  }
 });
 
 // Первый запуск без ключа — сразу на вкладку с полем для ключа
