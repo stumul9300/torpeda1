@@ -169,7 +169,7 @@ def test_base_token_stocks_fallback(api, factory, fake_wb):
     res = api.post("/api/wb/sync").json()
     lines = {line.split(":")[0]: line for line in res["summary"]}
     assert lines["остатки FBO"] == "остатки FBO: получено 3 строк"
-    assert "«Персональный»" in lines["остатки FBS"] and "ошибка" in lines["остатки FBS"]
+    assert "дополнительным требованиям" in lines["остатки FBS"] and "ошибка" in lines["остатки FBS"]
     assert "включите категорию" not in lines["остатки FBS"]
     with factory() as s:
         stocks = list(s.scalars(select(Stock).where(Stock.scheme == "FBO")))
@@ -181,4 +181,4 @@ def test_base_token_stocks_fallback(api, factory, fake_wb):
 def test_diagnose_explains_base_token(api, fake_wb):
     fake_wb.base_token = True
     checks = api.get("/api/wb/diagnose/stocks").json()
-    assert all("«Базовый»" in c["explanation"] for c in checks)
+    assert all("дополнительным требованиям" in c["explanation"] for c in checks)
