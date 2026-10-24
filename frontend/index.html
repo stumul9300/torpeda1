@@ -10,7 +10,7 @@
 </head>
 <body>
   <header>
-    <h1>Торпеда</h1>
+    <h1>Торпеда <small id="version"></small></h1>
     <nav>
       <button class="tab active" data-tab="products">Товары</button>
       <button class="tab" data-tab="reports">Отчёты</button>
@@ -23,6 +23,11 @@
       <span id="status"></span>
     </div>
   </header>
+  <div id="sync-panel" hidden>
+    <div id="sync-now"></div>
+    <ul id="sync-done"></ul>
+    <button type="button" id="sync-close">Скрыть</button>
+  </div>
 
   <section id="tab-products" class="panel active">
     <div class="toolbar">

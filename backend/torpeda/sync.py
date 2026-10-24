@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -37,7 +38,7 @@ from torpeda.db.models import (
     StorageRow,
     SyncLog,
 )
-from torpeda.wb_api.client import WBAuthError, WBClient, WBError
+from torpeda.wb_api.client import BASE_TOKEN_HINT, WBAuthError, WBClient, WBError, is_token_type_error
 
 ACC = DEFAULT_ACCOUNT_ID
 
@@ -116,9 +117,41 @@ def sync_commissions(client: WBClient, s: Session) -> int:
     return len(rows)
 
 
+REMAINS_TO_CLIENT = "В пути до получателей"
+REMAINS_FROM_CLIENT = "В пути возвраты на склад WB"
+
+
+def _remains_rows(items: list[dict]) -> list[dict]:
+    """Отчёт об остатках (warehouse_remains) в виде строк stocks-report: склад, количество, в пути."""
+    rows = []
+    for it in items:
+        to_client = from_client = 0
+        for w in it.get("warehouses") or []:
+            name, qty = w.get("warehouseName") or "", w.get("quantity") or 0
+            if name == REMAINS_TO_CLIENT:
+                to_client += qty
+            elif name == REMAINS_FROM_CLIENT:
+                from_client += qty
+            elif not name.startswith(("Всего", "В пути")):
+                rows.append({"nmId": it["nmId"], "warehouseName": name, "quantity": qty})
+        if to_client or from_client:
+            rows.append({"nmId": it["nmId"], "warehouseName": "в пути", "quantity": 0,
+                         "inWayToClient": to_client, "inWayFromClient": from_client})  # fmt: skip
+    return rows
+
+
 def sync_stocks(client: WBClient, s: Session, now: datetime, scheme: str) -> int:
-    """Снимок остатков: FBO — склады WB, FBS — склады продавца. Старый снимок этой схемы заменяется."""
-    rows = list(client.iter_stocks("wb" if scheme == "FBO" else "seller"))
+    """Снимок остатков: FBO — склады WB, FBS — склады продавца. Старый снимок этой схемы заменяется.
+
+    «Базовый» ключ WB к быстрому методу остатков не пускает: тогда FBO берём из отчёта об остатках."""
+    try:
+        rows = list(client.iter_stocks("wb" if scheme == "FBO" else "seller"))
+    except WBAuthError as e:
+        if not is_token_type_error(str(e)):
+            raise
+        if scheme == "FBS":
+            raise WBAuthError(f"{BASE_TOKEN_HINT} Остатки FBO при этом загружаются запасным способом.") from e
+        rows = _remains_rows(client.get_warehouse_remains())
     s.execute(delete(Stock).where(Stock.account_id == ACC, Stock.scheme == scheme))
     for r in rows:
         s.add(
@@ -483,8 +516,32 @@ KEY_CATEGORY = {
 }
 
 
-def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, now: datetime | None = None) -> dict:
-    """Загружает всё по очереди. Ошибка одного раздела не мешает остальным."""
+SYNC_UNITS = {"товары": "карточек", "цены": "товаров", "комиссии": "предметов", "остатки FBO": "строк",
+              "остатки FBS": "строк", "заказы": "заказов", "продажи": "строк", "финотчёт": "строк"}  # fmt: skip
+
+
+def describe(name: str, result: Any) -> str:
+    """Итог раздела для человека: «остатки FBO: получено 1 234 строк» или текст ошибки."""
+    if isinstance(result, str):
+        return f"{name}: {result}"
+    if isinstance(result, tuple):  # акции: (акций, товаров в акциях)
+        return f"{name}: получено акций {result[0]}, товаров в них {result[1]}"
+    text = f"{name}: получено {result:,} {SYNC_UNITS.get(name, 'строк')}".replace(",", " ")
+    if result == 0 and name.startswith("остатки"):
+        text += " — WB ответил пустым списком (если товары на складе есть, нажмите «Проверить остатки» в «Настройках»)"
+    return text
+
+
+def sync_all(
+    client: WBClient,
+    factory: sessionmaker[Session],
+    days: int = 30,
+    now: datetime | None = None,
+    on_step: Callable[[str, int, int, str | None], None] | None = None,
+) -> dict:
+    """Загружает всё по очереди. Ошибка одного раздела не мешает остальным.
+
+    on_step(раздел, номер, всего, итог) вызывается перед разделом (итог None) и после него."""
     now = now or datetime.now()
     date_from = (now - timedelta(days=days)).date()
     steps = {
@@ -499,7 +556,9 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
         "акции": lambda s: sync_promotions(client, s, now),
     }
     result: dict[str, Any] = {}
-    for name, step in steps.items():
+    for i, (name, step) in enumerate(steps.items(), start=1):
+        if on_step:
+            on_step(name, i, len(steps), None)
         with factory() as s:
             try:
                 result[name] = step(s)
@@ -508,7 +567,10 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
             except WBAuthError as e:
                 s.rollback()
                 category = KEY_CATEGORY.get(name)
-                hint = f"у ключа нет доступа, включите категорию «{category}». " if category else ""
+                if is_token_type_error(str(e)) or BASE_TOKEN_HINT in str(e):
+                    hint = "" if BASE_TOKEN_HINT in str(e) else BASE_TOKEN_HINT + " "
+                else:
+                    hint = f"у ключа нет доступа, включите категорию «{category}». " if category else ""
                 result[name] = f"ошибка: {hint}{e}"
             except WBError as e:
                 s.rollback()
@@ -520,6 +582,8 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
                 with factory() as s2:
                     log_sync(s2, name, False, str(result[name]), now)
                     s2.commit()
+        if on_step:
+            on_step(name, i, len(steps), describe(name, result[name]))
     return result
 
 

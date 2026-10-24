@@ -181,19 +181,40 @@ document.getElementById("only-changed").addEventListener("change", (e) => { only
 
 // --- загрузка из WB ---
 
+const syncPanel = document.getElementById("sync-panel");
+function showSyncSteps(now, done) {
+  syncPanel.hidden = false;
+  document.getElementById("sync-now").textContent = now;
+  document.getElementById("sync-done").innerHTML = done
+    .map((line) => {
+      const cls = line.includes("ошибка") ? "err" : line.includes("пустым списком") ? "warn" : "";
+      return `<li class="${cls}">${esc(line)}</li>`;
+    })
+    .join("");
+}
+document.getElementById("sync-close").addEventListener("click", () => { syncPanel.hidden = true; });
+
 document.getElementById("btn-sync").addEventListener("click", async (e) => {
   e.target.disabled = true;
-  setStatus("Загружаю из WB… это может занять несколько минут");
+  setStatus("Загружаю из WB…");
+  showSyncSteps("Начинаю загрузку из WB…", []);
+  const timer = setInterval(async () => {
+    try {
+      const p = await api("GET", "/api/wb/sync-progress");
+      if (p.running && p.step) showSyncSteps(`Шаг ${p.index} из ${p.total}: ${p.step}…`, p.done);
+    } catch { /* ход загрузки не критичен */ }
+  }, 1500);
   try {
     const res = await api("POST", "/api/wb/sync");
-    const errors = Object.entries(res).filter(([, v]) => String(v).startsWith("ошибка"));
-    setStatus(errors.length ? `Загружено с ошибками: ${errors.map(([k]) => k).join(", ")}` : "Данные загружены");
-    if (errors.length) alert(errors.map(([k, v]) => `${k}: ${v}`).join("\n"));
+    const errors = res.summary.filter((line) => line.includes("ошибка"));
+    showSyncSteps(errors.length ? "Загрузка закончена, есть ошибки:" : "Загрузка закончена:", res.summary);
+    setStatus(errors.length ? "Загружено с ошибками, подробности ниже" : "Данные загружены");
     await loadProducts();
   } catch (err) {
     setStatus("");
-    alert(err.message);
+    showSyncSteps("Загрузка не удалась:", [err.message]);
   } finally {
+    clearInterval(timer);
     e.target.disabled = false;
   }
 });
@@ -572,6 +593,7 @@ document.getElementById("costs-file").addEventListener("change", async (e) => {
 });
 
 api("GET", "/api/info").then((i) => {
+  document.getElementById("version").textContent = `версия ${i.version}`;
   document.getElementById("data-dir").textContent = `Ключи, себестоимость и журнал цен хранятся в папке ${i.data_dir}. Обновление программы их не стирает.`;
 });
 

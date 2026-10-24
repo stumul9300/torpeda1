@@ -103,6 +103,17 @@ class WBError(Exception):
     pass
 
 
+BASE_TOKEN_HINT = (
+    "Ключ WB типа «Базовый»: этот метод WB отдаёт только по «Персональному» ключу. "
+    "Создайте в кабинете WB ключ типа «Персональный» (Настройки → Доступ к API) и вставьте его в «Настройках»."
+)
+
+
+def is_token_type_error(text: str) -> bool:
+    """WB отвечает «token does not satisfy additional requirements», когда метод не принимает такой тип ключа."""
+    return "additional requirements" in text.lower()
+
+
 class WBAuthError(WBError):
     """Токен не подходит: неверный, просрочен или без нужной категории."""
 
@@ -221,6 +232,12 @@ class WBClient:
             if len(items) < page_size:
                 return
             offset += page_size
+
+    def get_warehouse_remains(self) -> list[dict]:
+        """Остатки на складах WB через отчёт-задание: работает и с «Базовым» ключом, но медленнее.
+        У «Базового» ключа проверка готовности — раз в 15 минут, поэтому сначала даём отчёту 30 секунд."""
+        params = {"groupByNm": "true", "groupBySize": "true", "groupBySa": "true"}
+        return self._task_report("warehouse_remains", params=params, first_wait=30)
 
     def get_orders(self, date_from: date) -> list[dict]:
         return self._statistics_changes("orders", date_from)
@@ -342,13 +359,26 @@ class WBClient:
                 return
             offset += page_size
 
-    def _task_report(self, kind: str, date_from: date, date_to: date, poll: float = 5, max_wait: float = 600) -> list:
+    def _task_report(
+        self,
+        kind: str,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        poll: float = 5,
+        max_wait: float = 600,
+        params: dict | None = None,
+        first_wait: float = 0,
+    ) -> list:
         """Отчёт-задание WB: создать, дождаться готовности, скачать."""
         base = f"{ANALYTICS}/api/v1/{kind}"
-        created = self._request("GET", base, params={"dateFrom": date_from.isoformat(), "dateTo": date_to.isoformat()})
+        if params is None:
+            params = {"dateFrom": date_from.isoformat(), "dateTo": date_to.isoformat()}
+        created = self._request("GET", base, params=params)
         task = ((created or {}).get("data") or {}).get("taskId")
         if not task:
             raise WBError(f"WB не создал отчёт {kind}: {str(created)[:200]}")
+        if first_wait:
+            self._sleep(first_wait)
         waited = 0.0
         while True:
             status = (((self._request("GET", f"{base}/tasks/{task}/status") or {}).get("data")) or {}).get("status")
