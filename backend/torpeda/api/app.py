@@ -8,13 +8,14 @@ from decimal import Decimal
 from functools import lru_cache
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, sessionmaker
 
 from torpeda import pricing, services
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
-from torpeda.config import get_settings
+from torpeda.config import BACKEND_DIR, get_settings, masked_keys, save_keys
 from torpeda.db import DEFAULT_ACCOUNT_ID, init_db, make_engine
 from torpeda.db.models import DEFAULT_SETTINGS, CostPrice, Price, Product, Promotion, Setting
 from torpeda.sync import sync_all
@@ -47,7 +48,7 @@ def get_wb_prices_client() -> Iterator[WBClient]:
     try:
         client = WBClient(get_settings().wb_prices_token)
     except WBError as e:
-        raise HTTPException(400, "Не задан WB_PRICES_TOKEN — ключ для изменения цен (см. docs/setup-api.md)") from e
+        raise HTTPException(400, "Не задан ключ для изменения цен. Вставьте его на вкладке «Настройки».") from e
     with client:
         yield client
 
@@ -177,6 +178,25 @@ def update_settings(values: dict[str, str], s: Session = Depends(get_session)) -
     return services.get_settings(s)
 
 
+# --- ключи WB ---
+
+
+@app.get("/api/keys")
+def read_keys() -> dict[str, str | None]:
+    return masked_keys()
+
+
+class KeysRequest(BaseModel):
+    read: str | None = None  # ключ «только чтение»; None — не менять, "" — удалить
+    prices: str | None = None  # ключ для цен
+
+
+@app.put("/api/keys")
+def update_keys(req: KeysRequest) -> dict[str, str | None]:
+    save_keys({k: v for k, v in req.model_dump().items() if v is not None})
+    return masked_keys()
+
+
 # --- Wildberries ---
 
 
@@ -239,3 +259,9 @@ def prices_send(
 @app.get("/api/prices/history")
 def prices_history(s: Session = Depends(get_session)) -> list[dict]:
     return pricing.history(s)
+
+
+# Интерфейс: статические файлы из frontend/, открывается на http://127.0.0.1:8000/
+FRONTEND_DIR = BACKEND_DIR.parent / "frontend"
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

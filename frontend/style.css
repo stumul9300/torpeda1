@@ -1,0 +1,37 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; color: #1d1d1f; background: #f6f6f8; }
+header { display: flex; align-items: center; gap: 24px; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ddd; }
+h1 { font-size: 18px; margin: 0; color: #6a1b9a; }
+nav { display: flex; gap: 4px; }
+.tab { border: none; background: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.tab.active { background: #efe5f5; color: #6a1b9a; font-weight: 600; }
+.actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+#status { color: #666; }
+button { padding: 7px 12px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; font-size: 14px; }
+button.primary { background: #6a1b9a; color: #fff; border-color: #6a1b9a; }
+button.danger { background: #c62828; color: #fff; border-color: #c62828; }
+button:disabled { opacity: .5; cursor: default; }
+.panel { display: none; padding: 12px 16px; }
+.panel.active { display: block; }
+.toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+.toolbar input[type=search] { width: 320px; padding: 7px 10px; border: 1px solid #ccc; border-radius: 6px; }
+.spacer { flex: 1; }
+.hint { color: #777; margin: 0 0 8px; font-size: 12px; }
+.grid { height: calc(100vh - 160px); width: 100%; }
+.grid-small { height: 50vh; width: 100%; }
+.row-loss { background: #fdecea !important; }
+.row-risk { background: #fff8e1 !important; }
+.cell-edit { background: #f3f9ff; }
+.neg { color: #c62828; font-weight: 600; }
+.pos { color: #2e7d32; }
+.missing { color: #b26a00; font-size: 12px; }
+.settings { display: grid; grid-template-columns: 420px; gap: 12px; }
+.settings label { display: flex; flex-direction: column; gap: 4px; }
+.settings input, .settings select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
+#check-result { background: #fff; padding: 8px; border-radius: 6px; min-height: 2em; }
+dialog { width: min(1100px, 95vw); border: none; border-radius: 10px; padding: 20px; }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.settings h2 { font-size: 16px; margin: 8px 0 0; }
+#tab-settings { display: none; }
+#tab-settings.active { display: flex; gap: 48px; align-items: flex-start; }
