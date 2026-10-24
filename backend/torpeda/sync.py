@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -26,6 +27,7 @@ from torpeda.db.models import (
     PromotionItem,
     ReportRow,
     Sale,
+    SalesReport,
     Stock,
 )
 from torpeda.wb_api.client import WBAuthError, WBClient, WBError
@@ -177,7 +179,27 @@ REPORT_MONEY = (
     "deduction",
     "acquiring_fee",
     "additional_payment",
+    "rebill_logistic_cost",
+    "cashback_amount",
+    "cashback_discount",
+    "cashback_commission_change",
 )
+
+# шапка отчёта: поле finance-api → колонка SalesReport
+SALES_REPORT_MONEY = {
+    "retailAmountSum": "retail_amount",
+    "forPaySum": "for_pay",
+    "deliveryServiceSum": "delivery",
+    "paidStorageSum": "storage",
+    "paidAcceptanceSum": "acceptance",
+    "deductionSum": "deduction",
+    "penaltySum": "penalty",
+    "additionalPaymentSum": "additional_payment",
+    "cashbackAmountSum": "cashback_amount",
+    "cashbackDiscountSum": "cashback_discount",
+    "cashbackCommissionChangeSum": "cashback_commission_change",
+    "bankPaymentSum": "bank_payment",
+}
 
 
 def sync_report(client: WBClient, s: Session, date_from: date, date_to: date) -> int:
@@ -190,6 +212,15 @@ def sync_report(client: WBClient, s: Session, date_from: date, date_to: date) ->
                 report_id=r.get("realizationreport_id"),
                 nm_id=r.get("nm_id") or None,
                 rr_dt=_d(r.get("rr_dt")),
+                date_from=_d(r.get("date_from")),
+                date_to=_d(r.get("date_to")),
+                sa_name=r.get("sa_name"),
+                ts_name=r.get("ts_name"),
+                subject_name=r.get("subject_name"),
+                brand_name=r.get("brand_name"),
+                bonus_type_name=r.get("bonus_type_name"),
+                srid=r.get("srid"),
+                raw=json.dumps(r, ensure_ascii=False),
                 doc_type_name=r.get("doc_type_name"),
                 supplier_oper_name=r.get("supplier_oper_name"),
                 office_name=r.get("office_name"),
@@ -200,7 +231,29 @@ def sync_report(client: WBClient, s: Session, date_from: date, date_to: date) ->
             )
         )
         n += 1
+    sync_sales_reports(client, s, date_from, date_to)
     return n
+
+
+def sync_sales_reports(client: WBClient, s: Session, date_from: date, date_to: date) -> int:
+    """Шапки отчётов для сверки. Если у ключа нет категории «Финансы», детализация всё равно загрузится."""
+    try:
+        reports = client.get_sales_reports(date_from, date_to)
+    except WBError:
+        return 0
+    for r in reports:
+        s.merge(
+            SalesReport(
+                account_id=ACC,
+                report_id=r["reportId"],
+                date_from=_d(r.get("dateFrom")),
+                date_to=_d(r.get("dateTo")),
+                create_date=_d(r.get("createDate")),
+                report_type=r.get("reportType"),
+                **{col: _dec(r.get(key)) or Decimal(0) for key, col in SALES_REPORT_MONEY.items()},
+            )
+        )
+    return len(reports)
 
 
 def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, int]:
@@ -242,7 +295,7 @@ KEY_CATEGORY = {
     "остатки FBS": "Аналитика",
     "заказы": "Статистика",
     "продажи": "Статистика",
-    "финотчёт": "Статистика",
+    "финотчёт": "Финансы",
     "акции": "Цены и скидки",
 }
 

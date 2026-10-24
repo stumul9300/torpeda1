@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -23,10 +23,23 @@ def _drop_outdated_snapshots(engine: Engine) -> None:
         Stock.__table__.drop(engine)
 
 
+def _add_missing_columns(engine: Engine) -> None:
+    """Новые колонки в существующих таблицах старой базы. Они необязательные: данные дозагрузятся из WB."""
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name not in existing:
+                    ddl = col.type.compile(dialect=engine.dialect)
+                    conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
+
+
 def init_db(engine: Engine) -> sessionmaker[Session]:
     """Создаёт таблицы, кабинет по умолчанию и настройки, если их ещё нет."""
     _drop_outdated_snapshots(engine)
     Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
     factory = sessionmaker(engine, expire_on_commit=False)
     with factory() as s:
         if s.get(Account, DEFAULT_ACCOUNT_ID) is None:

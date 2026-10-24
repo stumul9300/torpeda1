@@ -13,6 +13,7 @@
     <h1>Торпеда</h1>
     <nav>
       <button class="tab active" data-tab="products">Товары</button>
+      <button class="tab" data-tab="reports">Отчёты</button>
       <button class="tab" data-tab="promotions">Акции</button>
       <button class="tab" data-tab="history">Журнал цен</button>
       <button class="tab" data-tab="settings">Настройки</button>
@@ -35,6 +36,32 @@
     </div>
     <p class="hint">Двойной щелчок по ячейкам «Себест.», «Новая цена до скидки», «Новая скидка» — ввод. Enter — сохранить, маржа пересчитается сразу.</p>
     <div id="grid-products" class="ag-theme-quartz grid"></div>
+  </section>
+
+  <section id="tab-reports" class="panel">
+    <div class="toolbar">
+      <select id="report-select">
+        <optgroup label="Финансовые отчёты">
+          <option value="detail|nm">Детализация по артикулам</option>
+          <option value="detail|nm_size">Детализация по артикулам и размерам</option>
+          <option value="detail|office">Детализация по складам</option>
+          <option value="detail|office_nm_size">Детализация по складам, артикулам и размерам</option>
+          <option value="weeks|">Недельные отчёты</option>
+          <option value="logistics|nm">Логистика по артикулам</option>
+          <option value="logistics|office">Логистика по складам</option>
+          <option value="penalties|">Штрафы и брак</option>
+          <option value="deductions|">Прочие удержания</option>
+        </optgroup>
+      </select>
+      <label>с <input id="report-from" type="date"></label>
+      <label>по <input id="report-to" type="date"></label>
+      <button id="btn-report" class="primary">Показать</button>
+      <button id="btn-report-xlsx">Скачать в Excel</button>
+      <span class="spacer"></span>
+      <button id="btn-report-sync" title="WB отдаёт финотчёты медленно, за год это может занять несколько минут">Загрузить финотчёты из WB за эти даты</button>
+    </div>
+    <p class="hint" id="report-notes"></p>
+    <div id="grid-report" class="ag-theme-quartz grid"></div>
   </section>
 
   <section id="tab-promotions" class="panel">
