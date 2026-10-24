@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 from decimal import ROUND_HALF_UP, Decimal
-from enum import Enum
+from enum import StrEnum
 
 ZERO = Decimal(0)
 HUNDRED = Decimal(100)
@@ -27,7 +27,7 @@ KOPECK = Decimal("0.01")
 RUBLE = Decimal(1)
 
 
-class Scheme(str, Enum):
+class Scheme(StrEnum):
     FBO = "FBO"  # товар на складе WB
     FBS = "FBS"  # товар на складе продавца
 
