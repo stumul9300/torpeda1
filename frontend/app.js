@@ -69,7 +69,10 @@ const flatten = (r) => ({
 
 const editable = { editable: true, cellClass: "cell-edit", type: "numericColumn" };
 
+const photoCell = (p) => (p.value ? `<img class="thumb" src="${p.value}" loading="lazy" alt="" onerror="this.remove()">` : "");
+
 const productColumns = [
+  { headerName: "Фото", field: "photo", pinned: "left", width: 64, sortable: false, filter: false, cellRenderer: photoCell },
   { headerName: "Артикул WB", field: "nm_id", pinned: "left", width: 120 },
   { headerName: "Арт. продавца", field: "vendor_code", pinned: "left", width: 120 },
   { headerName: "Название", field: "title", width: 200 },
@@ -113,6 +116,7 @@ let onlyChanged = false;
 
 const productsGrid = agGrid.createGrid(document.getElementById("grid-products"), {
   columnDefs: productColumns,
+  rowHeight: 56,
   defaultColDef: { sortable: true, filter: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true },
   suppressColumnVirtualisation: true,
   localeText: RU,

@@ -60,6 +60,12 @@ def _d(v: str | None) -> date | None:
     return dt.date() if dt else None
 
 
+def _photo(card: dict) -> str | None:
+    """Ссылка на маленькое фото первой картинки карточки."""
+    photos = card.get("photos") or [{}]
+    return photos[0].get("tm") or photos[0].get("c246x328") or photos[0].get("square") or None
+
+
 def sync_products(client: WBClient, s: Session) -> int:
     n = 0
     for c in client.iter_cards():
@@ -77,6 +83,7 @@ def sync_products(client: WBClient, s: Session) -> int:
                 subject_id=c.get("subjectID"),
                 subject_name=c.get("subjectName"),
                 volume_l=volume,
+                photo_url=_photo(c),
             )
         )
         n += 1

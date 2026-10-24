@@ -173,6 +173,7 @@ def product_rows(s: Session) -> list[dict]:
         price = prices.get(p.nm_id)
         row = {
             "nm_id": p.nm_id,
+            "photo": f"/api/photos/{p.nm_id}" if p.photo_url else None,
             "vendor_code": p.vendor_code,
             "title": p.title,
             "brand": p.brand,
