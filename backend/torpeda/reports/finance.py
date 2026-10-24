@@ -25,7 +25,7 @@ from torpeda.services import get_settings
 
 from . import Column, Table
 
-__all__ = ["REPORTS", "Table"]
+__all__ = ["REPORTS", "NO_NM"]
 
 ACC = DEFAULT_ACCOUNT_ID
 ZERO = Decimal(0)

@@ -108,6 +108,15 @@ class Order(Base):
     finished_price: Mapped[Decimal | None] = mapped_column(Money)  # цена покупателя с СПП
     spp: Mapped[Decimal | None] = mapped_column(Percent)
     is_cancel: Mapped[bool] = mapped_column(Boolean, default=False)
+    cancel_date: Mapped[datetime | None] = mapped_column(DateTime)
+    supplier_article: Mapped[str | None] = mapped_column(String(100))
+    tech_size: Mapped[str | None] = mapped_column(String(50))
+    region: Mapped[str | None] = mapped_column(String(200))
+    oblast: Mapped[str | None] = mapped_column(String(200))  # федеральный округ
+    warehouse_type: Mapped[str | None] = mapped_column(String(100))
+    total_price: Mapped[Decimal | None] = mapped_column(Money)  # цена без скидок
+    discount_pct: Mapped[Decimal | None] = mapped_column(Percent)
+    g_number: Mapped[str | None] = mapped_column(String(100))  # корзина покупателя
 
 
 class Sale(Base):
@@ -123,6 +132,24 @@ class Sale(Base):
     finished_price: Mapped[Decimal | None] = mapped_column(Money)
     for_pay: Mapped[Decimal | None] = mapped_column(Money)
     spp: Mapped[Decimal | None] = mapped_column(Percent)
+    supplier_article: Mapped[str | None] = mapped_column(String(100))
+    tech_size: Mapped[str | None] = mapped_column(String(50))
+    region: Mapped[str | None] = mapped_column(String(200))
+    oblast: Mapped[str | None] = mapped_column(String(200))
+    warehouse_type: Mapped[str | None] = mapped_column(String(100))
+    g_number: Mapped[str | None] = mapped_column(String(100))
+
+
+class Plan(Base):
+    """План продаж на месяц: по товару (nm_id) или на весь кабинет (nm_id = 0)."""
+
+    __tablename__ = "plans"
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    month: Mapped[str] = mapped_column(String(7), primary_key=True)  # 2026-10
+    nm_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    qty: Mapped[int | None] = mapped_column(Integer)
+    revenue: Mapped[Decimal | None] = mapped_column(Money)
 
 
 class ReportRow(Base):

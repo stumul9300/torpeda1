@@ -18,9 +18,9 @@ from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, get_settings, masked_keys, save_keys
 from torpeda.db import DEFAULT_ACCOUNT_ID, init_db, make_engine
-from torpeda.db.models import DEFAULT_SETTINGS, CostPrice, Price, Product, Promotion, ReportRow, Setting
-from torpeda.reports import finance
-from torpeda.sync import sync_all, sync_report
+from torpeda.db.models import DEFAULT_SETTINGS, CostPrice, Order, Price, Product, Promotion, ReportRow, Setting
+from torpeda.reports import Table, finance, orders
+from torpeda.sync import sync_all, sync_orders, sync_report, sync_sales
 from torpeda.wb_api.client import WBClient, WBError
 
 app = FastAPI(title="Торпеда", version="0.2.0")
@@ -253,17 +253,52 @@ def wb_sync_report(req: PeriodRequest, client: WBClient = Depends(get_wb_client)
     return {"rows": n}
 
 
+@app.post("/api/wb/sync-orders")
+def wb_sync_orders(req: PeriodRequest, client: WBClient = Depends(get_wb_client)) -> dict:
+    """Заказы и продажи с даты (WB хранит заказы 90 дней)."""
+    with session_factory()() as s:
+        try:
+            n_orders = sync_orders(client, s, req.date_from)
+            n_sales = sync_sales(client, s, req.date_from)
+            s.commit()
+        except WBError as e:
+            raise HTTPException(502, str(e)) from e
+    return {"orders": n_orders, "sales": n_sales}
+
+
+class PlanRequest(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    nm_id: int = 0  # 0 — весь кабинет
+    qty: int | None = Field(default=None, ge=0)
+    revenue: Decimal | None = Field(default=None, ge=0)
+
+
+@app.put("/api/plans")
+def put_plan(req: PlanRequest, s: Session = Depends(get_session)) -> dict:
+    orders.save_plan(s, req.month, req.nm_id, req.qty, req.revenue)
+    return req.model_dump()
+
+
 # --- отчёты ---
 
 
 @app.get("/api/reports/range")
 def reports_range(s: Session = Depends(get_session)) -> dict:
     lo, hi = s.execute(select(func.min(ReportRow.rr_dt), func.max(ReportRow.rr_dt))).one()
-    return {"date_from": lo, "date_to": hi}
+    o_lo, o_hi = s.execute(select(func.min(Order.date), func.max(Order.date))).one()
+    return {
+        "date_from": lo,
+        "date_to": hi,
+        "orders_from": o_lo.date() if o_lo else None,
+        "orders_to": o_hi.date() if o_hi else None,
+    }
 
 
-def _report(name: str, s: Session, date_from: date, date_to: date, group: str | None) -> finance.Table:
-    fn = finance.REPORTS.get(name)
+REPORTS = finance.REPORTS | orders.REPORTS
+
+
+def _report(name: str, s: Session, date_from: date, date_to: date, group: str | None) -> Table:
+    fn = REPORTS.get(name)
     if fn is None:
         raise HTTPException(404, "Нет такого отчёта")
     return fn(s, date_from, date_to, group) if group else fn(s, date_from, date_to)

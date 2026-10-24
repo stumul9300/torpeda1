@@ -129,6 +129,18 @@ def sync_stocks(client: WBClient, s: Session, now: datetime, scheme: str) -> int
     return len(rows)
 
 
+def _place(r: dict) -> dict:
+    """Общие поля заказа и продажи: размер, артикул продавца, куда и откуда."""
+    return {
+        "supplier_article": r.get("supplierArticle"),
+        "tech_size": r.get("techSize"),
+        "region": r.get("regionName"),
+        "oblast": r.get("oblastOkrugName"),
+        "warehouse_type": r.get("warehouseType"),
+        "g_number": r.get("gNumber"),
+    }
+
+
 def sync_orders(client: WBClient, s: Session, date_from: date) -> int:
     rows = client.get_orders(date_from)
     for r in rows:
@@ -143,6 +155,10 @@ def sync_orders(client: WBClient, s: Session, date_from: date) -> int:
                 finished_price=_dec(r.get("finishedPrice")),
                 spp=_dec(r.get("spp")),
                 is_cancel=bool(r.get("isCancel")),
+                cancel_date=_dt(r.get("cancelDate")) if bool(r.get("isCancel")) else None,
+                total_price=_dec(r.get("totalPrice")),
+                discount_pct=_dec(r.get("discountPercent")),
+                **_place(r),
             )
         )
     return len(rows)
@@ -163,6 +179,7 @@ def sync_sales(client: WBClient, s: Session, date_from: date) -> int:
                 finished_price=_dec(r.get("finishedPrice")),
                 for_pay=_dec(r.get("forPay")),
                 spp=_dec(r.get("spp")),
+                **_place(r),
             )
         )
     return len(rows)

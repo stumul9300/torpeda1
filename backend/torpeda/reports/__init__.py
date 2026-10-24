@@ -17,7 +17,8 @@ from openpyxl.styles import Font
 class Column:
     field: str
     header: str
-    kind: str = "money"  # text | int | money | pct | date
+    kind: str = "money"  # text | int | num | money | pct | date
+    editable: bool = False  # ячейку можно править в браузере (например, план)
 
 
 @dataclass
