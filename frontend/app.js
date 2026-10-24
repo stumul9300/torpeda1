@@ -594,6 +594,7 @@ document.getElementById("costs-file").addEventListener("change", async (e) => {
 
 api("GET", "/api/info").then((i) => {
   document.getElementById("version").textContent = `версия ${i.version}`;
+  document.getElementById("app-info").textContent = `Версия программы: ${i.version}. Запущена из папки: ${i.app_dir}`;
   document.getElementById("data-dir").textContent = `Ключи, себестоимость и журнал цен хранятся в папке ${i.data_dir}. Обновление программы их не стирает.`;
 });
 

@@ -53,9 +53,34 @@ try {
     if ($LASTEXITCODE -ge 8) { Fail "Не получилось скопировать файлы (код $LASTEXITCODE). Пришлите скриншот этого окна." }
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
-    Write-Host "Готово. Запускаю программу." -ForegroundColor Green
+    $init = Get-Content (Join-Path $root "backend\torpeda\__init__.py") -Encoding UTF8 | Where-Object { $_ -like "__version__*" }
+    $version = ($init -split '"')[1]
+    Write-Host "Файлы обновлены до версии: $version" -ForegroundColor Green
+    Write-Host "Папка программы: $root"
+
+    # если порт всё ещё занят, старая программа не закрылась и новая не запустится
+    Start-Sleep -Seconds 2
+    if (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue) {
+        Fail "Старая программа всё ещё работает. Закройте все чёрные окна «Торпеда» (или перезагрузите компьютер) и запустите start.bat."
+    }
+
+    Write-Host "Запускаю программу..."
     Start-Process (Join-Path $root "start.bat")
-    Start-Sleep -Seconds 3
+    Write-Host "Жду, пока программа откроется (до 2 минут)..."
+    $info = $null
+    for ($i = 0; $i -lt 60 -and -not $info; $i++) {
+        Start-Sleep -Seconds 2
+        try { $info = Invoke-RestMethod "http://127.0.0.1:8000/api/info" -TimeoutSec 2 } catch { }
+    }
+    if (-not $info) {
+        Fail "Программа не открылась за 2 минуты. Посмотрите чёрное окно «Торпеда» и пришлите его скриншот."
+    }
+    if ($info.version -ne $version) {
+        Fail "Запущена другая копия программы: версия $($info.version) из папки $($info.app_dir). Закройте все окна «Торпеда» и запустите start.bat из папки $root."
+    }
+    Write-Host ""
+    Write-Host "Готово. Работает версия $($info.version)." -ForegroundColor Green
+    Read-Host "Нажмите Enter, чтобы закрыть окно"
 } catch {
     Fail "Ошибка обновления: $($_.Exception.Message). Пришлите скриншот этого окна."
 }

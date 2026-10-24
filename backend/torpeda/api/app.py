@@ -246,7 +246,7 @@ def update_settings(values: dict[str, str], s: Session = Depends(get_session)) -
 
 @app.get("/api/info")
 def info() -> dict:
-    return {"data_dir": str(config.DATA_DIR), "version": __version__}
+    return {"data_dir": str(config.DATA_DIR), "app_dir": str(config.BACKEND_DIR.parent), "version": __version__}
 
 
 @app.get("/api/keys")
