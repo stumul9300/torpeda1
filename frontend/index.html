@@ -83,6 +83,12 @@
           <option value="acceptance|nm">Платная приёмка по артикулам</option>
           <option value="acceptance|income">Платная приёмка по поставкам</option>
         </optgroup>
+        <optgroup label="Реклама">
+          <option value="ads|nm">Реклама по артикулам</option>
+          <option value="ads|campaign">Реклама по кампаниям</option>
+          <option value="ads|day">Реклама по дням</option>
+          <option value="ad_costs|">Списания за рекламу</option>
+        </optgroup>
       </select>
       <label>с <input id="report-from" type="date"></label>
       <label>по <input id="report-to" type="date"></label>
@@ -92,6 +98,7 @@
       <button id="btn-report-sync" title="WB отдаёт финотчёты медленно, за год это может занять несколько минут">Загрузить финотчёты из WB за эти даты</button>
       <button id="btn-orders-sync" title="WB хранит заказы только за последние 90 дней">Загрузить заказы и продажи из WB</button>
       <button id="btn-funnel-sync" title="WB считает воронку за весь выбранный период, не старше года">Загрузить воронку из WB за эти даты</button>
+      <button id="btn-ads-sync" title="Нужна категория ключа «Продвижение». WB отдаёт статистику медленно">Загрузить рекламу из WB за эти даты</button>
       <button id="btn-services-sync" title="WB готовит каждый отчёт до минуты, за месяц загрузка займёт несколько минут">Загрузить хранение и приёмку из WB</button>
     </div>
     <p class="hint" id="report-notes"></p>

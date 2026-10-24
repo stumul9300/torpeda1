@@ -24,6 +24,7 @@ from torpeda.db.models import CostPrice, ReportRow, SalesReport
 from torpeda.services import get_settings
 
 from . import Column, Table
+from .ads import ad_spend_by_nm
 
 __all__ = ["REPORTS", "NO_NM"]
 
@@ -84,6 +85,7 @@ class Agg:
     deductions: Decimal = ZERO
     additional: Decimal = ZERO
     acquiring: Decimal = ZERO
+    advertising: Decimal = ZERO  # из статистики рекламы, только в детализации по артикулам
     cost: Decimal = ZERO
     cost_missing_qty: int = 0
 
@@ -140,6 +142,7 @@ class Agg:
             acceptance=self.acceptance,
             penalties=self.penalties,
             other_wb=self.deductions,
+            advertising=self.advertising,
             loyalty_compensation=self.loyalty_comp,
             loyalty_points=self.loyalty_points,
             loyalty_fee=self.loyalty_fee,
@@ -209,6 +212,7 @@ DETAIL_COLUMNS = [
     Column("loyalty_points", "Баллы лояльности, руб"),
     Column("loyalty_fee", "Участие в лояльности, руб"),
     Column("acquiring", "Эквайринг, руб"),
+    Column("advertising", "Реклама, руб"),
     Column("tax", "Налог, руб"),
     Column("cost", "Себестоимость, руб"),
     Column("profit", "Маржа, руб"),
@@ -228,6 +232,9 @@ def detail(s: Session, date_from: date, date_to: date, group: str = "nm") -> Tab
         groups[tuple(values[k] for k in keys)].add(r, costs)
         if r.nm_id and (r.sa_name or r.subject_name):
             info[r.nm_id] = (r.sa_name, r.subject_name)
+    ad_spend = ad_spend_by_nm(s, date_from, date_to) if keys == ("nm_id",) else {}
+    for nm, spend in ad_spend.items():
+        groups[(nm or NO_NM,)].advertising += spend
 
     tax_pct = _tax_pct(s)
     total = Agg()
@@ -247,7 +254,11 @@ def detail(s: Session, date_from: date, date_to: date, group: str = "nm") -> Tab
         i = columns.index(KEY_COLUMNS["nm_id"]) + 1
         columns[i:i] = [Column("sa_name", "Артикул продавца", "text"), Column("subject_name", "Предмет", "text")]
     totals = {keys[0]: "Итого"} | total.result(tax_pct)
-    notes = [f"Налог {tax_pct}% от продаж в цене продавца. Реклама пока не вычитается, она будет на этапе 4."]
+    notes = [f"Налог {tax_pct}% от продаж в цене продавца."]
+    if keys == ("nm_id",):
+        notes.append("Реклама — затраты из статистики кампаний за эти даты (загрузите рекламу из WB).")
+    else:
+        notes.append("Реклама вычитается только в детализации по артикулам: по складам и размерам WB её не делит.")
     if missing_cost:
         notes.append(f"Нет себестоимости для {missing_cost} шт. проданного: маржа по ним завышена.")
     return Table(f"Детализация {title}", columns + DETAIL_COLUMNS, rows, totals, notes)

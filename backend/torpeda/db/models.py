@@ -313,6 +313,40 @@ class AcceptanceRow(Base):
     total: Mapped[Decimal] = mapped_column(Money, default=0)
 
 
+class AdStat(Base):
+    """Статистика рекламной кампании за день по товару: показы, клики, затраты, заказы с рекламы."""
+
+    __tablename__ = "ad_stats"
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    advert_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    nm_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    clicks: Mapped[int] = mapped_column(Integer, default=0)
+    atbs: Mapped[int] = mapped_column(Integer, default=0)  # в корзину
+    orders: Mapped[int] = mapped_column(Integer, default=0)
+    shks: Mapped[int] = mapped_column(Integer, default=0)  # заказано штук
+    spend: Mapped[Decimal] = mapped_column(Money, default=0)
+    orders_sum: Mapped[Decimal] = mapped_column(Money, default=0)
+
+
+class AdCost(Base):
+    """Списание за рекламу (история затрат WB): сколько и откуда списано по кампании."""
+
+    __tablename__ = "ad_costs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    advert_id: Mapped[int] = mapped_column(Integer, index=True)
+    campaign: Mapped[str | None] = mapped_column(String(300))
+    advert_type: Mapped[int | None] = mapped_column(Integer)
+    payment_type: Mapped[str | None] = mapped_column(String(100))
+    doc_num: Mapped[int | None] = mapped_column(Integer)
+    amount: Mapped[Decimal] = mapped_column(Money, default=0)
+
+
 class SyncLog(Base):
     """Итог последней загрузки каждого раздела: для вкладки «Настройки» → «Что пошло не так»."""
 

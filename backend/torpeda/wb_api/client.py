@@ -16,6 +16,8 @@
 - воронка продаж: seller-analytics-api, POST /api/analytics/v3/sales-funnel/products  (Аналитика)
 - платное хранение и приёмка: seller-analytics-api, отчёты-задания
   /api/v1/paid_storage и /api/v1/acceptance_report                             (Аналитика)
+- реклама: advert-api, списки кампаний /adv/v1/promotion/count, статистика /adv/v3/fullstats,
+  история затрат /adv/v1/upd                                                     (Продвижение)
 - календарь акций и товары акции: dp-calendar-api                              (Цены и скидки)
 
 Ответы WB возвращаются как есть (dict/list), разбор — в torpeda.sync.
@@ -37,6 +39,7 @@ STATISTICS = "https://statistics-api.wildberries.ru"
 CALENDAR = "https://dp-calendar-api.wildberries.ru"
 ANALYTICS = "https://seller-analytics-api.wildberries.ru"
 FINANCE = "https://finance-api.wildberries.ru"
+ADVERT = "https://advert-api.wildberries.ru"
 
 # Новый API финотчётов (finance-api) отдаёт поля в camelCase; приводим к именам старого
 # reportDetailByPeriod, чтобы разбор в torpeda.sync был один для обоих источников.
@@ -89,6 +92,7 @@ PING_TARGETS = {
     "Календарь акций": CALENDAR,
     "Аналитика": ANALYTICS,
     "Финансы": FINANCE,
+    "Продвижение": ADVERT,
 }
 
 
@@ -368,6 +372,45 @@ class WBClient:
     def iter_acceptance(self, date_from: date, date_to: date) -> Iterator[tuple[date, date, list]]:
         """Платная приёмка. Не больше 31 дня за раз."""
         return self._chunked("acceptance_report", date_from, date_to, 31)
+
+    # --- реклама ---
+
+    def get_advert_ids(self, changed_since: date) -> list[int]:
+        """Кампании, у которых может быть статистика за период: идут (9), на паузе (11) и завершённые (7)
+        не раньше начала периода."""
+        data = self._request("GET", f"{ADVERT}/adv/v1/promotion/count") or {}
+        ids = []
+        for group in data.get("adverts") or []:
+            if group.get("status") not in (7, 9, 11):
+                continue
+            for a in group.get("advert_list") or []:
+                changed = (a.get("changeTime") or "")[:10]
+                if group["status"] != 7 or not changed or changed >= changed_since.isoformat():
+                    ids.append(a["advertId"])
+        return ids
+
+    def iter_ad_fullstats(self, ids: list[int], date_from: date, date_to: date) -> Iterator[dict]:
+        """Статистика кампаний: до 50 кампаний и до 31 дня за запрос, 3 запроса в минуту."""
+        for i in range(0, len(ids), 50):
+            start = date_from
+            while start <= date_to:
+                end = min(start + timedelta(days=30), date_to)
+                params = {
+                    "ids": ",".join(map(str, ids[i : i + 50])),
+                    "beginDate": start.isoformat(),
+                    "endDate": end.isoformat(),
+                }
+                yield from self._request("GET", f"{ADVERT}/adv/v3/fullstats", params=params) or []
+                start = end + timedelta(days=1)
+
+    def iter_ad_costs(self, date_from: date, date_to: date) -> Iterator[dict]:
+        """История списаний за рекламу, по 31 дню за запрос."""
+        start = date_from
+        while start <= date_to:
+            end = min(start + timedelta(days=30), date_to)
+            params = {"from": start.isoformat(), "to": end.isoformat()}
+            yield from self._request("GET", f"{ADVERT}/adv/v1/upd", params=params) or []
+            start = end + timedelta(days=1)
 
     # --- акции ---
 

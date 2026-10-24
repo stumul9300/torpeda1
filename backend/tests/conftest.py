@@ -24,6 +24,7 @@ class FakeWB:
         self.fail_upload = False
         self.finance_enabled = True  # False — у ключа нет категории «Финансы», работает запасной способ
         self.analytics_enabled = True  # False — у ключа нет категории «Аналитика»
+        self.advert_enabled = True  # False — у ключа нет категории «Продвижение»
         self.task_polls: dict[str, int] = {}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -182,6 +183,10 @@ class FakeWB:
                 ]
             )
             return httpx.Response(200, json={"data": {"nomenclatures": items}})
+        if path.startswith("/adv/"):
+            if not self.advert_enabled:
+                return httpx.Response(401, json={"title": "unauthorized", "detail": "token scope not allowed"})
+            return self.advert(request, path)
         if path.startswith(("/api/analytics/v3/", "/api/v1/paid_storage", "/api/v1/acceptance_report")):
             if not self.analytics_enabled:
                 return httpx.Response(403, json={"title": "Forbidden", "detail": "token scope not allowed"})
@@ -193,6 +198,40 @@ class FakeWB:
             return httpx.Response(200, json={"data": {"id": 777, "alreadyExists": False}, "error": False})
         return httpx.Response(404, json={"error": "not mocked", "path": path})
 
+
+    def advert(self, request: httpx.Request, path: str) -> httpx.Response:
+        if path == "/adv/v1/promotion/count":
+            return httpx.Response(200, json={"all": 3, "adverts": [
+                {"type": 9, "status": 9, "count": 1,
+                 "advert_list": [{"advertId": 101, "changeTime": "2026-10-10T10:00:00Z"}]},
+                {"type": 9, "status": 7, "count": 2, "advert_list": [
+                    {"advertId": 102, "changeTime": "2026-10-05T10:00:00Z"},
+                    {"advertId": 103, "changeTime": "2025-01-05T10:00:00Z"}]},
+                {"type": 9, "status": 4, "count": 1, "advert_list": [{"advertId": 104}]},
+            ]})  # fmt: skip
+        if path == "/adv/v3/fullstats":
+            ids = [int(x) for x in request.url.params["ids"].split(",")]
+            day = request.url.params["beginDate"]
+
+            def nm(n, views, clicks, spend, orders, price):
+                return {"nmId": n, "views": views, "clicks": clicks, "atbs": 1, "orders": orders, "shks": orders,
+                        "sum": spend, "sum_price": price}  # fmt: skip
+
+            out = []
+            for i in ids:
+                apps = [{"appType": 1, "nms": [nm(418020031, 1000, 50, 250.5, 2, 6000)]},
+                        {"appType": 32, "nms": [nm(418020031, 500, 25, 100, 1, 3000), nm(555, 100, 5, 49.5, 0, 0)]}]
+                out.append({"advertId": i, "days": [{"date": f"{day}T00:00:00Z", "apps": apps}]})  # fmt: skip
+            return httpx.Response(200, json=out)
+        if path == "/adv/v1/upd":
+            start = request.url.params["from"]
+            return httpx.Response(200, json=[
+                {"updNum": 1, "updTime": f"{start}T12:00:00+03:00", "updSum": 400, "advertId": 101,
+                 "campName": "Поло поиск", "advertType": 9, "paymentType": "Баланс", "advertStatus": 9},
+                {"updNum": 2, "updTime": f"{start}T13:00:00+03:00", "updSum": 300, "advertId": 102,
+                 "campName": "Поло авто", "advertType": 8, "paymentType": "Счёт", "advertStatus": 7},
+            ])  # fmt: skip
+        return httpx.Response(404, json={"error": "not mocked", "path": path})
 
     def analytics(self, request: httpx.Request, path: str) -> httpx.Response:
         if path == "/api/analytics/v3/sales-funnel/products":
