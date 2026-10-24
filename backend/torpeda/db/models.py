@@ -260,6 +260,18 @@ class PriceChange(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class SyncLog(Base):
+    """Итог последней загрузки каждого раздела: для вкладки «Настройки» → «Что пошло не так»."""
+
+    __tablename__ = "sync_log"
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    section: Mapped[str] = mapped_column(String(100), primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime)
+    ok: Mapped[bool] = mapped_column(Boolean)
+    message: Mapped[str] = mapped_column(Text)
+
+
 class Setting(Base):
     __tablename__ = "settings"
 

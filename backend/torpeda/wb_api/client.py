@@ -139,6 +139,17 @@ class WBClient:
 
     # --- проверка связи ---
 
+    def probe(self, method: str, url: str, **kwargs) -> tuple[int, str]:
+        """Один запрос без повторов и без исключений: код ответа и текст. Для диагностики."""
+        try:
+            resp = self._http.request(method, url, **kwargs)
+        except httpx.HTTPError as e:
+            return 0, f"нет связи: {e}"
+        return resp.status_code, resp.text
+
+    def stocks_url(self, warehouses: str) -> str:
+        return f"{ANALYTICS}/api/analytics/v1/stocks-report/{warehouses}-warehouses"
+
     def ping(self) -> dict[str, str]:
         """Проверяет каждый сервис WB. Возвращает {категория: 'ok' или текст ошибки}."""
         result = {}
@@ -192,7 +203,7 @@ class WBClient:
         while True:
             data = self._request(
                 "POST",
-                f"{ANALYTICS}/api/analytics/v1/stocks-report/{warehouses}-warehouses",
+                self.stocks_url(warehouses),
                 json={"limit": page_size, "offset": offset},
             )
             items = ((data or {}).get("data") or {}).get("items") or []

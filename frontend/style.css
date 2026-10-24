@@ -35,3 +35,9 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .settings h2 { font-size: 16px; margin: 8px 0 0; }
 #tab-settings { display: none; }
 #tab-settings.active { display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start; }
+.log { border-collapse: collapse; font-size: 12px; background: #fff; }
+.log td { border-bottom: 1px solid #eee; padding: 4px 6px; vertical-align: top; }
+.diag { background: #fff; border-radius: 6px; padding: 8px; margin: 6px 0; font-size: 13px; }
+.diag.bad { border-left: 4px solid #c62828; }
+.diag.good { border-left: 4px solid #2e7d32; }
+.diag pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; color: #555; margin: 4px 0 0; }

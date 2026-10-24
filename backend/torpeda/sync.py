@@ -29,6 +29,7 @@ from torpeda.db.models import (
     Sale,
     SalesReport,
     Stock,
+    SyncLog,
 )
 from torpeda.wb_api.client import WBAuthError, WBClient, WBError
 
@@ -337,6 +338,7 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
         with factory() as s:
             try:
                 result[name] = step(s)
+                log_sync(s, name, True, f"загружено: {result[name]}", now)
                 s.commit()
             except WBAuthError as e:
                 s.rollback()
@@ -346,7 +348,18 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
             except WBError as e:
                 s.rollback()
                 result[name] = f"ошибка: {e}"
+            except Exception as e:  # неожиданный ответ WB или сбой сети не должен ронять всю загрузку
+                s.rollback()
+                result[name] = f"ошибка: {type(e).__name__}: {e}"
+            if str(result[name]).startswith("ошибка"):
+                with factory() as s2:
+                    log_sync(s2, name, False, str(result[name]), now)
+                    s2.commit()
     return result
+
+
+def log_sync(s: Session, section: str, ok: bool, message: str, now: datetime | None = None) -> None:
+    s.merge(SyncLog(account_id=ACC, section=section, at=now or datetime.now(), ok=ok, message=message[:2000]))
 
 
 def main(argv: list[str]) -> int:

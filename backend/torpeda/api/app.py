@@ -13,12 +13,22 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from torpeda import config, costs_excel, pricing, services
+from torpeda import config, costs_excel, diagnose, pricing, services
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, get_settings, masked_keys, save_keys
 from torpeda.db import DEFAULT_ACCOUNT_ID, init_db, make_engine
-from torpeda.db.models import DEFAULT_SETTINGS, CostPrice, Order, Price, Product, Promotion, ReportRow, Setting
+from torpeda.db.models import (
+    DEFAULT_SETTINGS,
+    CostPrice,
+    Order,
+    Price,
+    Product,
+    Promotion,
+    ReportRow,
+    Setting,
+    SyncLog,
+)
 from torpeda.reports import Table, finance, orders
 from torpeda.sync import sync_all, sync_orders, sync_report, sync_sales
 from torpeda.wb_api.client import WBClient, WBError
@@ -227,6 +237,17 @@ def update_keys(req: KeysRequest) -> dict[str, str | None]:
 @app.get("/api/wb/check")
 def wb_check(client: WBClient = Depends(get_wb_client)) -> dict[str, str]:
     return client.ping()
+
+
+@app.get("/api/wb/diagnose/stocks")
+def wb_diagnose_stocks(client: WBClient = Depends(get_wb_client)) -> list[dict]:
+    return diagnose.check_stocks(client)
+
+
+@app.get("/api/sync-log")
+def sync_log(s: Session = Depends(get_session)) -> list[dict]:
+    rows = s.scalars(select(SyncLog).where(SyncLog.account_id == ACC).order_by(SyncLog.at.desc(), SyncLog.section))
+    return [{"section": r.section, "at": r.at, "ok": r.ok, "message": r.message} for r in rows]
 
 
 @app.post("/api/wb/sync")
