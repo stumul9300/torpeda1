@@ -26,6 +26,7 @@ class FakeWB:
         self.analytics_enabled = True  # False — у ключа нет категории «Аналитика»
         self.advert_enabled = True  # False — у ключа нет категории «Продвижение»
         self.base_token = False  # True — ключ типа «Базовый»: быстрый метод остатков WB не пускает
+        self.marketplace_enabled = True  # False — у ключа нет категории «Маркетплейс»
         self.tariffs_coefs = True  # False — новый адрес коэффициентов недоступен, работает запасной
         self.task_polls: dict[str, int] = {}
 
@@ -47,6 +48,7 @@ class FakeWB:
                             "subjectID": 192,
                             "subjectName": "Поло",
                             "dimensions": {"length": 25, "width": 15, "height": 7},
+                            "sizes": [{"chrtID": 11, "techSize": "44"}, {"chrtID": 12, "techSize": "46"}],
                         }
                     ],
                     "cursor": {"updatedAt": "2026-10-20T10:00:00Z", "nmID": 418020031, "total": 1},
@@ -81,6 +83,14 @@ class FakeWB:
         if path.startswith("/api/analytics/v1/stocks-report/") and self.base_token:
             return httpx.Response(403, json={"status": 403, "title": "Forbidden",
                                              "detail": "token does not satisfy additional requirements"})  # fmt: skip
+        if path.startswith("/api/v3/") and not self.marketplace_enabled:
+            return httpx.Response(401, json={"title": "unauthorized", "detail": "token scope not allowed"})
+        if path == "/api/v3/warehouses":
+            return httpx.Response(200, json=[{"id": 77, "name": "Мой склад", "officeId": 1}])
+        if path == "/api/v3/stocks/77":
+            ids = json.loads(request.content)["chrtIds"]
+            stocks = [{"chrtId": i, "amount": {11: 4, 12: 0}.get(i, 0)} for i in ids]
+            return httpx.Response(200, json={"stocks": stocks})
         if path == "/api/analytics/v1/stocks-report/wb-warehouses":
             item = {
                 "nmId": 418020031,

@@ -169,10 +169,11 @@ def test_base_token_stocks_fallback(api, factory, fake_wb):
     res = api.post("/api/wb/sync").json()
     lines = {line.split(":")[0]: line for line in res["summary"]}
     assert lines["остатки FBO"] == "остатки FBO: получено 3 строк"
-    assert "дополнительным требованиям" in lines["остатки FBS"] and "ошибка" in lines["остатки FBS"]
-    assert "включите категорию" not in lines["остатки FBS"]
+    assert lines["остатки FBS"] == "остатки FBS: получено 1 строк"
     with factory() as s:
+        fbs = list(s.scalars(select(Stock).where(Stock.scheme == "FBS")))
         stocks = list(s.scalars(select(Stock).where(Stock.scheme == "FBO")))
+    assert [(x.nm_id, x.warehouse, x.quantity) for x in fbs] == [(418020031, "Мой склад", 4)]
     assert sum(x.quantity for x in stocks) == 45
     assert sum(x.in_way_to_client for x in stocks) == 3
     assert {x.warehouse for x in stocks} == {"Коледино", "Тула", "в пути"}
@@ -182,3 +183,18 @@ def test_diagnose_explains_base_token(api, fake_wb):
     fake_wb.base_token = True
     checks = api.get("/api/wb/diagnose/stocks").json()
     assert all("дополнительным требованиям" in c["explanation"] for c in checks)
+
+
+def test_fbs_fallback_needs_marketplace(api, fake_wb):
+    fake_wb.base_token = True
+    fake_wb.marketplace_enabled = False
+    res = api.post("/api/wb/sync").json()
+    lines = {line.split(":")[0]: line for line in res["summary"]}
+    assert "«Маркетплейс»" in lines["остатки FBS"] and "ошибка" in lines["остатки FBS"]
+    assert "Аналитика" not in lines["остатки FBS"]
+    assert lines["остатки FBO"] == "остатки FBO: получено 3 строк"
+
+
+def test_index_has_versioned_assets(api):
+    html = api.get("/").text
+    assert 'src="app.js?v=' in html and 'href="style.css?v=' in html
