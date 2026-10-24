@@ -37,6 +37,7 @@ document.querySelectorAll(".tab").forEach((b) =>
     document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + b.dataset.tab));
     if (b.dataset.tab === "history") loadHistory();
+    if (b.dataset.tab === "reports") loadReport();
     if (b.dataset.tab === "promotions") loadPromotions();
     if (b.dataset.tab === "settings") loadSettings();
   })
@@ -332,6 +333,85 @@ async function loadPromotion(id) {
   promoGrid.setGridOption("rowData", data.items);
 }
 promoSelect.addEventListener("change", () => loadPromotion(promoSelect.value));
+
+// --- отчёты ---
+
+const intFmt = (p) => (p.value === null || p.value === undefined || p.value === "" ? "" : Number(p.value).toLocaleString("ru-RU"));
+const dateFmt = (p) => (p.value ? new Date(p.value).toLocaleDateString("ru-RU") : "");
+const KIND = {
+  text: {},
+  date: { valueFormatter: dateFmt, width: 100 },
+  int: { valueFormatter: intFmt, type: "numericColumn", width: 115 },
+  money: { valueFormatter: rub, type: "numericColumn", width: 135 },
+  pct: { valueFormatter: pct, type: "numericColumn", width: 100 },
+};
+const reportGrid = agGrid.createGrid(document.getElementById("grid-report"), {
+  columnDefs: [],
+  // cellDataType: false — иначе строка «Итого» в числовой колонке артикула показывается как ошибка
+  defaultColDef: { sortable: true, filter: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true, cellDataType: false },
+  localeText: { ...RU, noRowsToShow: "Нет данных за эти даты. Загрузите финотчёты из WB." },
+  getRowStyle: (p) => (p.node.rowPinned ? { fontWeight: 600 } : null),
+});
+const reportFrom = document.getElementById("report-from");
+const reportTo = document.getElementById("report-to");
+const reportParams = () => {
+  const [name, group] = document.getElementById("report-select").value.split("|");
+  const q = new URLSearchParams({ date_from: reportFrom.value, date_to: reportTo.value });
+  if (group) q.set("group", group);
+  return { name, q };
+};
+
+async function initReportDates() {
+  if (reportFrom.value) return;
+  const r = await api("GET", "/api/reports/range");
+  const to = r.date_to ? new Date(r.date_to) : new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - 29);
+  reportTo.value = to.toISOString().slice(0, 10);
+  reportFrom.value = from.toISOString().slice(0, 10);
+}
+
+async function loadReport() {
+  await initReportDates();
+  const { name, q } = reportParams();
+  setStatus("Считаю отчёт…");
+  try {
+    const data = await api("GET", `/api/reports/${name}?${q}`);
+    reportGrid.setGridOption("columnDefs", data.columns.map((c) => ({
+      field: c.field,
+      headerName: c.header,
+      ...KIND[c.kind],
+      ...(c.kind === "text" ? { width: c.field === "reason" || c.field === "oper" ? 260 : 140 } : {}),
+      cellClass: c.field === "profit" || c.field === "profit_per_unit" ? signClass : undefined,
+    })));
+    reportGrid.setGridOption("rowData", data.rows);
+    reportGrid.setGridOption("pinnedTopRowData", data.totals ? [data.totals] : []);
+    document.getElementById("report-notes").textContent = data.notes.join(" ");
+    setStatus(`${data.title}: строк ${data.rows.length}`);
+  } catch (err) {
+    setStatus(err.message);
+  }
+}
+document.getElementById("btn-report").addEventListener("click", loadReport);
+document.getElementById("report-select").addEventListener("change", loadReport);
+document.getElementById("btn-report-xlsx").addEventListener("click", () => {
+  const { name, q } = reportParams();
+  window.location = `/api/reports/${name}.xlsx?${q}`;
+});
+document.getElementById("btn-report-sync").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  setStatus("Загружаю финотчёты из WB… WB отдаёт их медленно, подождите");
+  try {
+    const res = await api("POST", "/api/wb/sync-report", { date_from: reportFrom.value, date_to: reportTo.value });
+    setStatus(`Загружено строк финотчётов: ${res.rows}`);
+    await loadReport();
+  } catch (err) {
+    setStatus("");
+    alert(err.message);
+  } finally {
+    e.target.disabled = false;
+  }
+});
 
 // --- настройки ---
 

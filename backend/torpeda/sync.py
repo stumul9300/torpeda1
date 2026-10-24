@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -177,6 +178,7 @@ REPORT_MONEY = (
     "deduction",
     "acquiring_fee",
     "additional_payment",
+    "rebill_logistic_cost",
 )
 
 
@@ -190,6 +192,15 @@ def sync_report(client: WBClient, s: Session, date_from: date, date_to: date) ->
                 report_id=r.get("realizationreport_id"),
                 nm_id=r.get("nm_id") or None,
                 rr_dt=_d(r.get("rr_dt")),
+                date_from=_d(r.get("date_from")),
+                date_to=_d(r.get("date_to")),
+                sa_name=r.get("sa_name"),
+                ts_name=r.get("ts_name"),
+                subject_name=r.get("subject_name"),
+                brand_name=r.get("brand_name"),
+                bonus_type_name=r.get("bonus_type_name"),
+                srid=r.get("srid"),
+                raw=json.dumps(r, ensure_ascii=False),
                 doc_type_name=r.get("doc_type_name"),
                 supplier_oper_name=r.get("supplier_oper_name"),
                 office_name=r.get("office_name"),

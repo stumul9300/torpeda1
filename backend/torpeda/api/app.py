@@ -10,6 +10,7 @@ from functools import lru_cache
 from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from torpeda import config, costs_excel, pricing, services
@@ -17,8 +18,9 @@ from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, get_settings, masked_keys, save_keys
 from torpeda.db import DEFAULT_ACCOUNT_ID, init_db, make_engine
-from torpeda.db.models import DEFAULT_SETTINGS, CostPrice, Price, Product, Promotion, Setting
-from torpeda.sync import sync_all
+from torpeda.db.models import DEFAULT_SETTINGS, CostPrice, Price, Product, Promotion, ReportRow, Setting
+from torpeda.reports import finance
+from torpeda.sync import sync_all, sync_report
 from torpeda.wb_api.client import WBClient, WBError
 
 app = FastAPI(title="Торпеда", version="0.2.0")
@@ -230,6 +232,58 @@ def wb_check(client: WBClient = Depends(get_wb_client)) -> dict[str, str]:
 @app.post("/api/wb/sync")
 def wb_sync(days: int = 30, client: WBClient = Depends(get_wb_client)) -> dict:
     return sync_all(client, session_factory(), days=days)
+
+
+class PeriodRequest(BaseModel):
+    date_from: date
+    date_to: date
+
+
+@app.post("/api/wb/sync-report")
+def wb_sync_report(req: PeriodRequest, client: WBClient = Depends(get_wb_client)) -> dict:
+    """Финотчёты за выбранный период (WB отдаёт детализацию медленно: 1 запрос в минуту)."""
+    if req.date_from > req.date_to:
+        raise HTTPException(400, "Дата «с» позже даты «по»")
+    with session_factory()() as s:
+        try:
+            n = sync_report(client, s, req.date_from, req.date_to)
+            s.commit()
+        except WBError as e:
+            raise HTTPException(502, str(e)) from e
+    return {"rows": n}
+
+
+# --- отчёты ---
+
+
+@app.get("/api/reports/range")
+def reports_range(s: Session = Depends(get_session)) -> dict:
+    lo, hi = s.execute(select(func.min(ReportRow.rr_dt), func.max(ReportRow.rr_dt))).one()
+    return {"date_from": lo, "date_to": hi}
+
+
+def _report(name: str, s: Session, date_from: date, date_to: date, group: str | None) -> finance.Table:
+    fn = finance.REPORTS.get(name)
+    if fn is None:
+        raise HTTPException(404, "Нет такого отчёта")
+    return fn(s, date_from, date_to, group) if group else fn(s, date_from, date_to)
+
+
+@app.get("/api/reports/{name}.xlsx")
+def report_xlsx(
+    name: str, date_from: date, date_to: date, group: str | None = None, s: Session = Depends(get_session)
+) -> Response:
+    table = _report(name, s, date_from, date_to, group)
+    return Response(
+        table.to_xlsx(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="torpeda-{name}-{date_from}-{date_to}.xlsx"'},
+    )
+
+
+@app.get("/api/reports/{name}")
+def report(name: str, date_from: date, date_to: date, group: str | None = None, s: Session = Depends(get_session)):
+    return _report(name, s, date_from, date_to, group).to_json()
 
 
 # --- отправка цен в WB: предпросмотр → подтверждение ---

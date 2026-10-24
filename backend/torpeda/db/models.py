@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 Money = Numeric(14, 2)
@@ -135,6 +135,14 @@ class ReportRow(Base):
     report_id: Mapped[int | None] = mapped_column(Integer, index=True)
     nm_id: Mapped[int | None] = mapped_column(Integer, index=True)
     rr_dt: Mapped[date | None] = mapped_column(Date, index=True)
+    date_from: Mapped[date | None] = mapped_column(Date)  # период недельного отчёта
+    date_to: Mapped[date | None] = mapped_column(Date)
+    sa_name: Mapped[str | None] = mapped_column(String(100))  # артикул продавца
+    ts_name: Mapped[str | None] = mapped_column(String(50))  # размер
+    subject_name: Mapped[str | None] = mapped_column(String(200))
+    brand_name: Mapped[str | None] = mapped_column(String(200))
+    bonus_type_name: Mapped[str | None] = mapped_column(String(500))  # вид штрафа или удержания
+    srid: Mapped[str | None] = mapped_column(String(100))
     doc_type_name: Mapped[str | None] = mapped_column(String(50))  # Продажа / Возврат
     supplier_oper_name: Mapped[str | None] = mapped_column(String(200))  # Продажа, Логистика, Хранение, Штраф...
     office_name: Mapped[str | None] = mapped_column(String(200))
@@ -151,6 +159,8 @@ class ReportRow(Base):
     deduction: Mapped[Decimal] = mapped_column(Money, default=0)  # прочие удержания
     acquiring_fee: Mapped[Decimal] = mapped_column(Money, default=0)
     additional_payment: Mapped[Decimal] = mapped_column(Money, default=0)
+    rebill_logistic_cost: Mapped[Decimal] = mapped_column(Money, default=0)  # возмещение издержек по перевозке
+    raw: Mapped[str | None] = mapped_column(Text)  # строка WB целиком (JSON), для будущих отчётов
 
 
 class Promotion(Base):
