@@ -43,6 +43,7 @@ ANALYTICS = "https://seller-analytics-api.wildberries.ru"
 FINANCE = "https://finance-api.wildberries.ru"
 ADVERT = "https://advert-api.wildberries.ru"
 SUPPLIES = "https://supplies-api.wildberries.ru"
+MARKETPLACE = "https://marketplace-api.wildberries.ru"
 
 # Новый API финотчётов (finance-api) отдаёт поля в camelCase; приводим к именам старого
 # reportDetailByPeriod, чтобы разбор в torpeda.sync был один для обоих источников.
@@ -96,6 +97,7 @@ PING_TARGETS = {
     "Аналитика": ANALYTICS,
     "Финансы": FINANCE,
     "Продвижение": ADVERT,
+    "Маркетплейс (остатки FBS)": MARKETPLACE,
 }
 
 
@@ -250,6 +252,20 @@ class WBClient:
             if len(items) < page_size:
                 return
             offset += page_size
+
+    def get_seller_warehouses(self) -> list[dict]:
+        """Склады продавца (FBS). Нужна категория ключа «Маркетплейс»."""
+        return self._request("GET", f"{MARKETPLACE}/api/v3/warehouses") or []
+
+    def get_seller_stocks(self, warehouse_id: int, chrt_ids: list[int]) -> list[dict]:
+        """Остатки на складе продавца по размерам (chrtId), не больше 1000 размеров за запрос."""
+        out = []
+        for i in range(0, len(chrt_ids), 1000):
+            data = self._request(
+                "POST", f"{MARKETPLACE}/api/v3/stocks/{warehouse_id}", json={"chrtIds": chrt_ids[i : i + 1000]}
+            )
+            out += (data or {}).get("stocks") or []
+        return out
 
     def get_warehouse_remains(self) -> list[dict]:
         """Остатки на складах WB через отчёт-задание: работает и с «Базовым» ключом, но медленнее.

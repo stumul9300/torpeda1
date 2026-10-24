@@ -140,18 +140,48 @@ def _remains_rows(items: list[dict]) -> list[dict]:
     return rows
 
 
+FBS_NO_ACCESS = (
+    "Для остатков FBS (ваши склады) нужна категория ключа «Маркетплейс». "
+    "Если вы не продаёте со своего склада, эту строку можно не замечать."
+)
+
+
+def _marketplace_rows(client: WBClient) -> list[dict]:
+    """Остатки FBS через раздел «Маркетплейс»: склады продавца и остатки по размерам карточек."""
+    try:
+        warehouses = client.get_seller_warehouses()
+        if not warehouses:
+            return []
+        nm_by_chrt = {
+            size["chrtID"]: card["nmID"]
+            for card in client.iter_cards()
+            for size in card.get("sizes") or []
+            if size.get("chrtID")
+        }
+        if not nm_by_chrt:
+            return []
+        rows = []
+        for wh in warehouses:
+            for st in client.get_seller_stocks(wh["id"], list(nm_by_chrt)):
+                nm = nm_by_chrt.get(st.get("chrtId"))
+                if nm and st.get("amount"):
+                    rows.append({"nmId": nm, "warehouseName": wh.get("name") or "", "quantity": st["amount"]})
+        return rows
+    except WBAuthError as e:
+        raise WBAuthError(f"{FBS_NO_ACCESS} Ответ WB: {e}") from e
+
+
 def sync_stocks(client: WBClient, s: Session, now: datetime, scheme: str) -> int:
     """Снимок остатков: FBO — склады WB, FBS — склады продавца. Старый снимок этой схемы заменяется.
 
-    «Базовый» ключ WB к быстрому методу остатков не пускает: тогда FBO берём из отчёта об остатках."""
+    Если WB не пускает ключ к быстрому методу остатков, FBO берём из отчёта об остатках,
+    а FBS — через раздел «Маркетплейс»."""
     try:
         rows = list(client.iter_stocks("wb" if scheme == "FBO" else "seller"))
     except WBAuthError as e:
         if not is_token_type_error(str(e)):
             raise
-        if scheme == "FBS":
-            raise WBAuthError(f"{BASE_TOKEN_HINT} Остатки FBO при этом загружаются запасным способом.") from e
-        rows = _remains_rows(client.get_warehouse_remains())
+        rows = _marketplace_rows(client) if scheme == "FBS" else _remains_rows(client.get_warehouse_remains())
     s.execute(delete(Stock).where(Stock.account_id == ACC, Stock.scheme == scheme))
     for r in rows:
         s.add(
@@ -569,7 +599,9 @@ def sync_all(
             except WBAuthError as e:
                 s.rollback()
                 category = KEY_CATEGORY.get(name)
-                if is_token_type_error(str(e)) or BASE_TOKEN_HINT in str(e):
+                if FBS_NO_ACCESS in str(e):
+                    hint = ""
+                elif is_token_type_error(str(e)) or BASE_TOKEN_HINT in str(e):
                     hint = "" if BASE_TOKEN_HINT in str(e) else BASE_TOKEN_HINT + " "
                 else:
                     hint = f"у ключа нет доступа, включите категорию «{category}». " if category else ""

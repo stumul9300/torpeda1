@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
 from functools import lru_cache
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
@@ -510,5 +511,17 @@ def prices_history(s: Session = Depends(get_session)) -> list[dict]:
 
 # Интерфейс: статические файлы из frontend/, открывается на http://127.0.0.1:8000/
 FRONTEND_DIR = BACKEND_DIR.parent / "frontend"
+
+
+@app.get("/", include_in_schema=False)
+@app.get("/index.html", include_in_schema=False)
+def index() -> Response:
+    """Страница со ссылками на app.js и style.css с номером версии: после обновления браузер не возьмёт старые."""
+    html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    v = quote(__version__)
+    html = html.replace('href="style.css"', f'href="style.css?v={v}"').replace('src="app.js"', f'src="app.js?v={v}"')
+    return Response(html, media_type="text/html", headers={"Cache-Control": "no-cache"})
+
+
 if FRONTEND_DIR.is_dir():
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
