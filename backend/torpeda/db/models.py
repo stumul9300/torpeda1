@@ -260,6 +260,59 @@ class PriceChange(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class FunnelRow(Base):
+    """Воронка продаж по карточке за период (переходы → корзина → заказы → выкупы). WB считает сам за период."""
+
+    __tablename__ = "funnel"
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    date_from: Mapped[date] = mapped_column(Date, primary_key=True)
+    date_to: Mapped[date] = mapped_column(Date, primary_key=True)
+    nm_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    open_count: Mapped[int] = mapped_column(Integer, default=0)
+    cart_count: Mapped[int] = mapped_column(Integer, default=0)
+    wishlist: Mapped[int] = mapped_column(Integer, default=0)
+    order_count: Mapped[int] = mapped_column(Integer, default=0)
+    order_sum: Mapped[Decimal] = mapped_column(Money, default=0)
+    buyout_count: Mapped[int] = mapped_column(Integer, default=0)
+    buyout_sum: Mapped[Decimal] = mapped_column(Money, default=0)
+    cancel_count: Mapped[int] = mapped_column(Integer, default=0)
+    cancel_sum: Mapped[Decimal] = mapped_column(Money, default=0)
+    loaded_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class StorageRow(Base):
+    """Платное хранение за день по размеру товара на складе."""
+
+    __tablename__ = "paid_storage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    date: Mapped[date] = mapped_column(Date, index=True)
+    nm_id: Mapped[int] = mapped_column(Integer, index=True)
+    warehouse: Mapped[str | None] = mapped_column(String(200))
+    size: Mapped[str | None] = mapped_column(String(100))
+    volume: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))  # литры
+    barcodes_count: Mapped[int] = mapped_column(Integer, default=0)
+    price: Mapped[Decimal] = mapped_column(Money, default=0)
+    calc_type: Mapped[str | None] = mapped_column(String(200))
+
+
+class AcceptanceRow(Base):
+    """Платная приёмка: товар поставки, принятый в день."""
+
+    __tablename__ = "paid_acceptance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    date: Mapped[date] = mapped_column(Date, index=True)
+    income_id: Mapped[int | None] = mapped_column(Integer)
+    nm_id: Mapped[int] = mapped_column(Integer, index=True)
+    subject: Mapped[str | None] = mapped_column(String(200))
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    total: Mapped[Decimal] = mapped_column(Money, default=0)
+
+
 class SyncLog(Base):
     """Итог последней загрузки каждого раздела: для вкладки «Настройки» → «Что пошло не так»."""
 

@@ -29,9 +29,18 @@ from torpeda.db.models import (
     Setting,
     SyncLog,
 )
-from torpeda.reports import Table, finance, orders, stocks
-from torpeda.sync import sync_all, sync_orders, sync_report, sync_sales
-from torpeda.wb_api.client import WBClient, WBError
+from torpeda.reports import Table, analytics, finance, orders, stocks
+from torpeda.sync import (
+    log_sync,
+    sync_acceptance,
+    sync_all,
+    sync_funnel,
+    sync_orders,
+    sync_paid_storage,
+    sync_report,
+    sync_sales,
+)
+from torpeda.wb_api.client import WBAuthError, WBClient, WBError
 
 app = FastAPI(title="Торпеда", version="0.2.0")
 ACC = DEFAULT_ACCOUNT_ID
@@ -287,6 +296,46 @@ def wb_sync_orders(req: PeriodRequest, client: WBClient = Depends(get_wb_client)
     return {"orders": n_orders, "sales": n_sales}
 
 
+def _analytics_sync(section: str, fn) -> dict:
+    """Загрузка из раздела «Аналитика»: понятная ошибка и запись в журнал «Что пошло не так»."""
+    with session_factory()() as s:
+        try:
+            result = fn(s)
+            s.commit()
+        except WBAuthError as e:
+            s.rollback()
+            msg = f"у ключа нет доступа, включите категорию «Аналитика». {e}"
+            log_sync(s, section, False, msg)
+            s.commit()
+            raise HTTPException(502, msg) from e
+        except WBError as e:
+            s.rollback()
+            log_sync(s, section, False, str(e))
+            s.commit()
+            raise HTTPException(502, str(e)) from e
+        log_sync(s, section, True, "загружено строк: " + ", ".join(str(v) for v in result.values()))
+        s.commit()
+    return result
+
+
+@app.post("/api/wb/sync-funnel")
+def wb_sync_funnel(req: PeriodRequest, client: WBClient = Depends(get_wb_client)) -> dict:
+    """Воронка продаж за ровно эти даты (WB хранит год)."""
+    return _analytics_sync("воронка", lambda s: {"rows": sync_funnel(client, s, req.date_from, req.date_to)})
+
+
+@app.post("/api/wb/sync-services")
+def wb_sync_services(req: PeriodRequest, client: WBClient = Depends(get_wb_client)) -> dict:
+    """Платное хранение и приёмка. WB готовит каждый отчёт до минуты, хранение — по 8 дней за раз."""
+    return _analytics_sync(
+        "хранение и приёмка",
+        lambda s: {
+            "storage": sync_paid_storage(client, s, req.date_from, req.date_to),
+            "acceptance": sync_acceptance(client, s, req.date_from, req.date_to),
+        },
+    )
+
+
 class PlanRequest(BaseModel):
     month: str = Field(pattern=r"^\d{4}-\d{2}$")
     nm_id: int = 0  # 0 — весь кабинет
@@ -315,7 +364,7 @@ def reports_range(s: Session = Depends(get_session)) -> dict:
     }
 
 
-REPORTS = finance.REPORTS | orders.REPORTS | stocks.REPORTS
+REPORTS = finance.REPORTS | orders.REPORTS | stocks.REPORTS | analytics.REPORTS
 
 
 def _report(name: str, s: Session, date_from: date, date_to: date, group: str | None) -> Table:

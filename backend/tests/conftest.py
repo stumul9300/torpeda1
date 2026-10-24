@@ -23,6 +23,8 @@ class FakeWB:
         self.uploaded: list[dict] = []
         self.fail_upload = False
         self.finance_enabled = True  # False — у ключа нет категории «Финансы», работает запасной способ
+        self.analytics_enabled = True  # False — у ключа нет категории «Аналитика»
+        self.task_polls: dict[str, int] = {}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -180,12 +182,44 @@ class FakeWB:
                 ]
             )
             return httpx.Response(200, json={"data": {"nomenclatures": items}})
+        if path.startswith(("/api/analytics/v3/", "/api/v1/paid_storage", "/api/v1/acceptance_report")):
+            if not self.analytics_enabled:
+                return httpx.Response(403, json={"title": "Forbidden", "detail": "token scope not allowed"})
+            return self.analytics(request, path)
         if path == "/api/v2/upload/task":
             if self.fail_upload:
                 return httpx.Response(400, json={"error": True, "errorText": "bad price"})
             self.uploaded.append(json.loads(request.content))
             return httpx.Response(200, json={"data": {"id": 777, "alreadyExists": False}, "error": False})
         return httpx.Response(404, json={"error": "not mocked", "path": path})
+
+
+    def analytics(self, request: httpx.Request, path: str) -> httpx.Response:
+        if path == "/api/analytics/v3/sales-funnel/products":
+            body = json.loads(request.content)
+            period = body["selectedPeriod"]
+            stat = {"period": period, "openCount": 1000, "cartCount": 100, "orderCount": 40, "orderSum": 80000,
+                    "buyoutCount": 30, "buyoutSum": 60000, "cancelCount": 10, "cancelSum": 20000, "addToWishlist": 15}
+            item = {"product": {"nmId": 418020031, "vendorCode": "8447"}, "statistic": {"selected": stat}}
+            return httpx.Response(200, json={"data": {"products": [item]}, "currency": "RUB"})  # fmt: skip
+        kind = "paid_storage" if "paid_storage" in path else "acceptance_report"
+        if path == f"/api/v1/{kind}":
+            q = request.url.params
+            task = f"{kind}:{q['dateFrom']}:{q['dateTo']}"
+            return httpx.Response(200, json={"data": {"taskId": task}})
+        task = path.split("/")[5]
+        if path.endswith("/status"):
+            self.task_polls[task] = self.task_polls.get(task, 0) + 1
+            status = "done" if self.task_polls[task] > 1 else "processing"
+            return httpx.Response(200, json={"data": {"id": task, "status": status}})
+        _, start, _end = task.split(":")
+        if kind == "paid_storage":
+            rows = [{"date": start, "warehouse": "Коледино", "nmId": 418020031, "size": "42", "volume": 2.5,
+                     "warehousePrice": 7.65, "barcodesCount": 3, "calcType": "короба"}]  # fmt: skip
+        else:
+            rows = [{"count": 40, "giCreateDate": start, "incomeId": 11834106, "nmID": 418020031,
+                     "shkCreateDate": start, "subjectName": "Поло", "total": 873.04}]  # fmt: skip
+        return httpx.Response(200, json=rows)
 
 
 def report_rows() -> list[dict]:
