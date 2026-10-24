@@ -37,6 +37,7 @@
       <label><input type="checkbox" id="only-changed"> Только с новой ценой</label>
       <span class="spacer"></span>
       <span id="summary"></span>
+      <button id="btn-bulk-cost" type="button">Себестоимость всем…</button>
       <button id="btn-preview" class="primary">Отправить новые цены в WB…</button>
     </div>
     <p class="hint">Двойной щелчок по ячейкам «Себест.», «Новая цена до скидки», «Новая скидка» — ввод. Enter — сохранить, маржа пересчитается сразу.</p>
@@ -154,6 +155,20 @@
       <button type="button" id="btn-check">Проверить связь с WB</button>
       <pre id="check-result"></pre>
     </form>
+
+    <div class="settings" id="bulk-cost">
+      <h2>Себестоимость сразу всем товарам</h2>
+      <label>Себестоимость, руб
+        <input id="bulk-cost-value" type="number" min="0" step="0.01" value="700">
+      </label>
+      <label><input type="radio" name="bulk-cost-who" value="empty" checked> Только товарам без себестоимости</label>
+      <label><input type="radio" name="bulk-cost-who" value="all"> Всем товарам (прежние значения заменятся)</label>
+      <label><input type="checkbox" id="bulk-cost-past" checked> И для отчётов за прошлые периоды</label>
+      <button type="button" id="bulk-cost-save" class="primary">Записать себестоимость</button>
+      <button type="button" id="bulk-cost-undo">Вернуть прошлое</button>
+      <p class="hint">«Вернуть прошлое» отменяет последнюю запись этой кнопкой: товарам вернутся прежние значения.</p>
+      <pre id="bulk-cost-result"></pre>
+    </div>
 
     <div class="settings">
       <h2>Себестоимость в Excel</h2>

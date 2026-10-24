@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from collections.abc import Iterator
 from datetime import date
@@ -12,7 +13,7 @@ from urllib.parse import quote
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from torpeda import __version__, config, costs_excel, diagnose, pricing, services
@@ -179,6 +180,48 @@ async def import_costs(file: UploadFile, s: Session = Depends(get_session)) -> d
         return costs_excel.import_costs(s, await file.read())
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+
+
+class BulkCostRequest(BaseModel):
+    cost: Decimal = Field(ge=0)
+    only_empty: bool = True  # True — только товарам без себестоимости
+    past_too: bool = True  # True — и для отчётов за прошлые периоды
+
+
+COSTS_UNDO_FILE = "costs_undo.json"
+ALL_TIME = date(2000, 1, 1)  # «действует с» для себестоимости, которая должна попасть и в прошлые отчёты
+
+
+@app.post("/api/costs/bulk")
+def bulk_cost(req: BulkCostRequest, s: Session = Depends(get_session)) -> dict:
+    """Одна себестоимость сразу многим товарам. Прежние записи не стираются: «Вернуть прошлое» удаляет новые."""
+    nm_ids = list(s.scalars(select(Product.nm_id).where(Product.account_id == ACC)))
+    if req.only_empty:
+        has_cost = set(s.scalars(select(CostPrice.nm_id).where(CostPrice.account_id == ACC)))
+        nm_ids = [nm for nm in nm_ids if nm not in has_cost]
+    valid_from = ALL_TIME if req.past_too else date.today()
+    rows = [CostPrice(account_id=ACC, nm_id=nm, cost=req.cost, valid_from=valid_from) for nm in nm_ids]
+    s.add_all(rows)
+    s.commit()
+    if rows:  # пустая запись не должна затирать возможность вернуть прошлую
+        config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        undo = {"ids": [r.id for r in rows], "cost": str(req.cost)}
+        (config.DATA_DIR / COSTS_UNDO_FILE).write_text(json.dumps(undo), encoding="utf-8")
+    return {"written": len(rows)}
+
+
+@app.post("/api/costs/undo")
+def undo_bulk_cost(s: Session = Depends(get_session)) -> dict:
+    """Отменяет последнюю массовую запись себестоимости: товарам возвращаются прежние значения."""
+    path = config.DATA_DIR / COSTS_UNDO_FILE
+    try:
+        ids = json.loads(path.read_text(encoding="utf-8"))["ids"]
+    except (FileNotFoundError, ValueError, KeyError):
+        raise HTTPException(400, "Нечего возвращать: массовой записи себестоимости ещё не было.") from None
+    removed = s.execute(delete(CostPrice).where(CostPrice.account_id == ACC, CostPrice.id.in_(ids))).rowcount
+    s.commit()
+    path.unlink()
+    return {"restored": removed}
 
 
 @app.put("/api/products/{nm_id}/cost")
