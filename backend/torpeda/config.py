@@ -3,18 +3,20 @@
 Ключи WB (keys.json) и база (torpeda.db) лежат в постоянной папке вне программы:
 на Windows это папка Torpeda внутри %LOCALAPPDATA%, поэтому обновление программы их не стирает.
 Другую папку можно задать переменной TORPEDA_DATA_DIR.
-Запасной способ задать ключи — переменные окружения или файл backend/.env (они важнее файла ключей).
+Ключ, сохранённый в программе, важнее всего. Переменные окружения и файл backend/.env используются,
+только если в программе ключ не сохранён.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
@@ -63,16 +65,32 @@ def save_keys(values: dict[str, str]) -> None:
     for name, value in values.items():
         if name not in KEY_NAMES:
             raise ValueError(f"Неизвестный ключ: {name}")
-        if value.strip():
-            keys[name] = value.strip()
+        if value := clean_key(value):
+            keys[name] = value
         else:
             keys.pop(name, None)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     KEYS_FILE.write_text(json.dumps(keys), encoding="utf-8")
 
 
+def clean_key(value: str) -> str:
+    """Ключ без пробелов и переносов строк, которые попадают при копировании: в самом ключе WB их не бывает."""
+    return re.sub(r"\s+", "", value or "")
+
+
+def key_source(name: str) -> tuple[str, str]:
+    """Ключ и откуда он взят: сохранённый в программе важнее .env и переменных окружения."""
+    if saved := read_keys_file().get(name, ""):
+        return saved, "программа"
+    env_name = KEY_NAMES[name]
+    if from_env := clean_key(os.getenv(env_name, "")):
+        in_dotenv = clean_key(dotenv_values(BACKEND_DIR / ".env").get(env_name) or "") == from_env
+        return from_env, "файл backend\\.env" if in_dotenv else "переменная окружения Windows"
+    return "", ""
+
+
 def _key(name: str) -> str:
-    return os.getenv(KEY_NAMES[name], "").strip() or read_keys_file().get(name, "")
+    return key_source(name)[0]
 
 
 def masked_keys() -> dict[str, str | None]:

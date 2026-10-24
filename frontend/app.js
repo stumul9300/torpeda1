@@ -528,24 +528,61 @@ async function loadSettings() {
 
 const keysForm = document.getElementById("keys-form");
 function showKeys(keys) {
-  document.getElementById("key-read-current").textContent = keys.read ? `сохранён ${keys.read}` : "не задан";
-  document.getElementById("key-prices-current").textContent = keys.prices ? `сохранён ${keys.prices}` : "не задан";
+  for (const name of ["read", "prices"]) {
+    const el = document.getElementById(`key-${name}-current`);
+    const info = (keys.info || {})[name];
+    if (!keys[name] || !info) {
+      el.className = "key-now";
+      el.textContent = "Сейчас: ключ не задан";
+      continue;
+    }
+    const lines = [`Сейчас используется ключ, окончание ${keys[name]}`, ...info.summary];
+    if (info.source !== "программа") lines.push(`Взят из: ${info.source}. Сохраните ключ здесь, и программа будет брать его.`);
+    if (info.text) lines.push(info.text);
+    el.className = `key-now ${info.ok ? "good" : "bad"}`;
+    el.innerHTML = lines.map((l) => `<div>${esc(l)}</div>`).join("");
+  }
+}
+function keysResult(text, ok) {
+  const el = document.getElementById("keys-result");
+  el.className = ok ? "good" : "bad";
+  el.textContent = text;
+}
+for (const btn of document.querySelectorAll(".key-clear")) {
+  btn.addEventListener("click", async () => {
+    if (!confirm("Удалить сохранённый ключ из программы?")) return;
+    try {
+      showKeys(await api("PUT", "/api/keys", { [btn.dataset.key]: "" }));
+      keysResult("Ключ удалён из программы.", true);
+    } catch (err) {
+      keysResult(err.message, false);
+    }
+  });
 }
 keysForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = {};
   for (const name of ["read", "prices"]) {
-    const v = keysForm.elements[name].value.trim();
+    const v = keysForm.elements[name].value.replace(/\s+/g, "");
     if (v) body[name] = v;
   }
-  if (!Object.keys(body).length) return;
+  if (!Object.keys(body).length) {
+    keysResult("Поле пустое: вставьте ключ и нажмите «Сохранить ключи».", false);
+    return;
+  }
   try {
-    showKeys(await api("PUT", "/api/keys", body));
+    const keys = await api("PUT", "/api/keys", body);
+    showKeys(keys);
     keysForm.reset();
+    const done = Object.keys(body).map((name) => {
+      const info = keys.info[name];
+      return `Ключ принят: окончание ${keys[name]}, ${info.summary.join(", ").toLowerCase()}.`;
+    });
+    keysResult(done.join(" "), true);
     setStatus("Ключи сохранены");
     document.getElementById("btn-check").click();
   } catch (err) {
-    alert(err.message);
+    keysResult(err.message, false);
   }
 });
 form.addEventListener("submit", async (e) => {
