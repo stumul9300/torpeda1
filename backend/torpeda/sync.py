@@ -541,7 +541,9 @@ def sync_all(
 ) -> dict:
     """Загружает всё по очереди. Ошибка одного раздела не мешает остальным.
 
-    on_step(раздел, номер, всего, итог) вызывается перед разделом (итог None) и после него."""
+    on_step(раздел, номер, всего, итог) вызывается перед разделом (итог None) и после него.
+    В журнал пишется время окончания каждого раздела, если now не задан явно."""
+    log_at = now
     now = now or datetime.now()
     date_from = (now - timedelta(days=days)).date()
     steps = {
@@ -562,7 +564,7 @@ def sync_all(
         with factory() as s:
             try:
                 result[name] = step(s)
-                log_sync(s, name, True, f"загружено: {result[name]}", now)
+                log_sync(s, name, True, f"загружено: {result[name]}", log_at)
                 s.commit()
             except WBAuthError as e:
                 s.rollback()
@@ -580,7 +582,7 @@ def sync_all(
                 result[name] = f"ошибка: {type(e).__name__}: {e}"
             if str(result[name]).startswith("ошибка"):
                 with factory() as s2:
-                    log_sync(s2, name, False, str(result[name]), now)
+                    log_sync(s2, name, False, str(result[name]), log_at)
                     s2.commit()
         if on_step:
             on_step(name, i, len(steps), describe(name, result[name]))
