@@ -69,11 +69,37 @@ const flatten = (r) => ({
 
 const editable = { editable: true, cellClass: "cell-edit", type: "numericColumn" };
 
-const photoCell = (p) => (p.value ? `<img class="thumb" src="${p.value}" loading="lazy" alt="" onerror="this.remove()">` : "");
+// Ссылка на страницу товара на Wildberries, открывается в новой вкладке. Строка «Итого» остаётся текстом.
+const wbUrl = (nm) => `https://www.wildberries.ru/catalog/${nm}/detail.aspx`;
+function wbAnchor(nm) {
+  const a = document.createElement("a");
+  a.href = wbUrl(nm);
+  a.target = "_blank";
+  a.rel = "noopener";
+  return a;
+}
+const wbLink = (p) => {
+  if (!/^\d+$/.test(String(p.value ?? ""))) return p.valueFormatted ?? p.value ?? "";
+  const a = wbAnchor(p.value);
+  a.textContent = p.value;
+  return a;
+};
+const photoCell = (p) => {
+  if (!p.value) return "";
+  const a = wbAnchor(p.data.nm_id);
+  const img = document.createElement("img");
+  img.className = "thumb";
+  img.src = p.value;
+  img.loading = "lazy";
+  img.alt = "";
+  img.onerror = () => img.remove();
+  a.append(img);
+  return a;
+};
 
 const productColumns = [
   { headerName: "Фото", field: "photo", pinned: "left", width: 64, sortable: false, filter: false, cellRenderer: photoCell },
-  { headerName: "Артикул WB", field: "nm_id", pinned: "left", width: 120 },
+  { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, pinned: "left", width: 120 },
   { headerName: "Арт. продавца", field: "vendor_code", pinned: "left", width: 120 },
   { headerName: "Название", field: "title", width: 200 },
   { headerName: "Бренд", field: "brand", width: 110 },
@@ -230,7 +256,7 @@ let pending = null;
 
 const previewGrid = agGrid.createGrid(document.getElementById("grid-preview"), {
   columnDefs: [
-    { headerName: "Артикул WB", field: "nm_id", width: 110 },
+    { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 110 },
     { headerName: "Арт. продавца", field: "vendor_code", width: 110 },
     { headerName: "Было: цена / скидка", valueGetter: (p) => `${p.data.old_price} ₽ / ${p.data.old_discount}%`, width: 150 },
     { headerName: "Станет: цена / скидка", valueGetter: (p) => `${p.data.new_price} ₽ / ${p.data.new_discount}%`, width: 160 },
@@ -294,7 +320,7 @@ document.getElementById("btn-confirm").addEventListener("dblclick", async (e) =>
 const historyGrid = agGrid.createGrid(document.getElementById("grid-history"), {
   columnDefs: [
     { headerName: "Когда", field: "sent_at", width: 170, valueFormatter: (p) => new Date(p.value).toLocaleString("ru-RU") },
-    { headerName: "Артикул WB", field: "nm_id", width: 120 },
+    { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 120 },
     { headerName: "Было", valueGetter: (p) => `${num(p.data.old_price)} ₽ / ${num(p.data.old_discount_pct)}%`, width: 150 },
     { headerName: "Стало", valueGetter: (p) => `${num(p.data.new_price)} ₽ / ${num(p.data.new_discount_pct)}%`, width: 150 },
     { headerName: "Статус", field: "status", width: 100, valueFormatter: (p) => (p.value === "sent" ? "отправлено" : "ошибка") },
@@ -326,7 +352,7 @@ document.getElementById("btn-history-refresh").addEventListener("click", loadHis
 
 const promoGrid = agGrid.createGrid(document.getElementById("grid-promo"), {
   columnDefs: [
-    { headerName: "Артикул WB", field: "nm_id", width: 120 },
+    { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 120 },
     { headerName: "Арт. продавца", field: "vendor_code", width: 120 },
     { headerName: "Участвует", field: "in_action", width: 100, valueFormatter: (p) => (p.value ? "да" : "нет") },
     { headerName: "Маржа сейчас, ₽", valueGetter: (p) => num(p.data.current?.profit), valueFormatter: rub, cellClass: signClass, width: 130 },
@@ -425,6 +451,7 @@ async function loadReport() {
       ...(c.editable ? { editable: (p) => !p.node.rowPinned, cellClass: "cell-edit", valueParser: (p) => (p.newValue === "" || p.newValue === null ? null : Number(String(p.newValue).replace(/\s/g, "").replace(",", "."))) } : {}),
       ...(c.kind === "text" ? { width: c.field === "reason" || c.field === "oper" ? 260 : 140 } : {}),
       ...(c.field === "profit" || c.field === "profit_per_unit" ? { cellClass: signClass } : {}),
+      ...(c.field === "nm_id" ? { cellRenderer: wbLink } : {}),
     })));
     reportGrid.setGridOption("rowData", data.rows);
     reportGrid.setGridOption("pinnedTopRowData", data.totals ? [data.totals] : []);
