@@ -62,6 +62,13 @@ const flatten = (r) => ({
   cur_margin: num(r.current?.margin_pct),
   cur_roi: num(r.current?.roi_pct),
   calc_seller_price: num(r.calc?.seller_price),
+  site_price: num(r.site_price),
+  // во сколько раз цена на сайте отличается от цены продавца: СПП и всё, что WB добавляет сам
+  site_k: r.site_price && r.current?.seller_price ? num(r.site_price) / num(r.current.seller_price) : null,
+  target_site_price:
+    r.site_price && r.current?.seller_price && r.calc?.seller_price
+      ? Math.round((num(r.calc.seller_price) * num(r.site_price)) / num(r.current.seller_price))
+      : null,
   calc_profit: num(r.calc?.profit),
   calc_margin: num(r.calc?.margin_pct),
   calc_roi: num(r.calc?.roi_pct),
@@ -114,6 +121,20 @@ const sppCell = (p) => {
   return span;
 };
 
+// Цена на сайте с временем, когда её видели: старше суток — серым
+const sitePriceCell = (p) => {
+  if (p.value == null) return "—";
+  const span = document.createElement("span");
+  const at = p.data.site_price_at ? new Date(p.data.site_price_at) : null;
+  const stale = !at || Date.now() - at.getTime() > 24 * 3600 * 1000;
+  span.textContent = rub(p);
+  const small = document.createElement("small");
+  small.className = stale ? "spp-at stale" : "spp-at";
+  small.textContent = at ? ` · ${at.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : "";
+  span.append(small);
+  return span;
+};
+
 const productColumns = [
   { headerName: "Фото", field: "photo", pinned: "left", width: 64, sortable: false, filter: false, cellRenderer: photoCell },
   { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, pinned: "left", width: 120 },
@@ -132,6 +153,7 @@ const productColumns = [
       { headerName: "Скидка", field: "discount_pct", width: 80, valueFormatter: pct, type: "numericColumn" },
       { headerName: "Цена продавца", field: "cur_seller_price", width: 110, valueFormatter: rub, type: "numericColumn" },
       { headerName: "СПП", field: "spp", width: 110, cellRenderer: sppCell, type: "numericColumn", headerTooltip: "СПП из самого свежего заказа и время этого заказа. WB отдаёт СПП только по сделанным заказам" },
+      { headerName: "Цена на сайте (Москва)", field: "site_price", width: 130, cellRenderer: sitePriceCell, type: "numericColumn", headerTooltip: "Цена для покупателя в Москве на сайте WB. Обновляется кнопкой «Обновить цены на сайте»" },
       { headerName: "Цена с СПП", field: "buyer_price", width: 100, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn" },
       { headerName: "Комиссия", field: "cur_commission", width: 100, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Логистика", field: "cur_logistics", width: 100, valueFormatter: rub, type: "numericColumn" },
@@ -144,6 +166,7 @@ const productColumns = [
   {
     headerName: "Новая цена (расчёт)",
     children: [
+      { headerName: "Желаемая цена на сайте", field: "target_site_price", width: 130, valueFormatter: rub, ...editable, cellClass: "cell-edit cell-target", headerTooltip: "Введите цену, которую хотите видеть на сайте: программа подберёт цену до скидки" },
       { headerName: "Новая цена до скидки", field: "calc_price", width: 130, valueFormatter: rub, ...editable },
       { headerName: "Новая скидка", field: "calc_discount_pct", width: 100, valueFormatter: pct, ...editable },
       { headerName: "Цена продавца", field: "calc_seller_price", width: 110, valueFormatter: rub, type: "numericColumn" },
@@ -201,6 +224,16 @@ async function saveCell(e) {
     if (e.colDef.field === "cost") {
       if (value === null) return;
       await api("PUT", `/api/products/${nm}/cost`, { cost: value });
+    } else if (e.colDef.field === "target_site_price") {
+      // цену на сайте напрямую не поменять: подбираем цену до скидки при той же скидке и нынешней разнице с сайтом
+      if (value === null) {
+        await api("PUT", `/api/products/${nm}/calc-price`, { price: null, discount_pct: null });
+      } else {
+        if (!e.data.site_k) throw new Error("Сначала нажмите «Обновить цены на сайте»: без нынешней цены на сайте пересчитать нельзя.");
+        const disc = e.data.calc_discount_pct ?? e.data.discount_pct ?? 0;
+        const price = Math.round(value / e.data.site_k / (1 - disc / 100));
+        await api("PUT", `/api/products/${nm}/calc-price`, { price, discount_pct: e.data.calc_discount_pct });
+      }
     } else {
       await api("PUT", `/api/products/${nm}/calc-price`, {
         price: e.colDef.field === "calc_price" ? value : e.data.calc_price ?? e.data.price,
@@ -669,11 +702,23 @@ async function syncSpp() {
   }
 }
 document.getElementById("btn-spp").addEventListener("click", syncSpp);
+
+async function syncSitePrices() {
+  setStatus("Смотрю цены на сайте WB…");
+  try {
+    const res = await api("POST", "/api/wb/sync-site-prices");
+    await loadProducts();
+    setStatus(`Цены на сайте обновлены: товаров ${res.products}`);
+  } catch (err) {
+    setStatus(`Цены на сайте: ${err.message}`);
+  }
+}
+document.getElementById("btn-site-prices").addEventListener("click", syncSitePrices);
 const sppHourly = document.getElementById("spp-hourly");
 let sppTimer = null;
 function setSppHourly(on) {
   clearInterval(sppTimer);
-  sppTimer = on ? setInterval(syncSpp, 3600 * 1000) : null;
+  sppTimer = on ? setInterval(async () => { await syncSpp(); await syncSitePrices(); }, 3600 * 1000) : null;
   try {
     localStorage.setItem("sppHourly", on ? "1" : "");
   } catch {}

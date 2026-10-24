@@ -46,6 +46,7 @@ from torpeda.sync import (
     sync_paid_storage,
     sync_report,
     sync_sales,
+    sync_site_prices,
 )
 from torpeda.wb_api.client import WBAuthError, WBClient, WBError
 
@@ -497,6 +498,12 @@ def wb_sync_spp(client: WBClient = Depends(get_wb_client)) -> dict:
     """Свежие заказы за последние сутки: из них берётся текущая СПП. Один запрос к WB (лимит — раз в минуту)."""
     since = date.today() - timedelta(days=1)
     return _analytics_sync("СПП", lambda s: {"orders": sync_orders(client, s, since)}, "Статистика")
+
+
+@app.post("/api/wb/sync-site-prices")
+def wb_sync_site_prices() -> dict:
+    """Цены на сайте WB для покупателя в Москве (публичная карточка товара, ключ не нужен)."""
+    return _analytics_sync("цены на сайте", lambda s: {"products": sync_site_prices(s)})
 
 
 @app.post("/api/wb/sync-coefficients")

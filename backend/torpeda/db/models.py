@@ -52,6 +52,8 @@ class Price(Base):
     price: Mapped[Decimal] = mapped_column(Money)  # цена до скидки, из WB
     discount_pct: Mapped[Decimal] = mapped_column(Percent)  # скидка продавца, из WB
     club_discount_pct: Mapped[Decimal | None] = mapped_column(Percent)
+    site_price: Mapped[Decimal | None] = mapped_column(Money)  # цена на сайте для покупателя в Москве
+    site_price_at: Mapped[datetime | None] = mapped_column(DateTime)
     # Расчётная цена: что пользователь ввёл в таблице. В WB не отправляется (репрайсера в v1 нет).
     calc_price: Mapped[Decimal | None] = mapped_column(Money)
     calc_discount_pct: Mapped[Decimal | None] = mapped_column(Percent)

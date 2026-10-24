@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from torpeda.config import get_settings
@@ -39,6 +39,7 @@ from torpeda.db.models import (
     SyncLog,
 )
 from torpeda.wb_api.client import BASE_TOKEN_HINT, WBAuthError, WBClient, WBError, is_token_type_error
+from torpeda.wb_api.site import get_site_prices
 
 ACC = DEFAULT_ACCOUNT_ID
 
@@ -104,10 +105,24 @@ def sync_prices(client: WBClient, s: Session) -> int:
             # расчётную цену, введённую в таблице, не затираем
             calc_price=existing.calc_price if existing else None,
             calc_discount_pct=existing.calc_discount_pct if existing else None,
+            site_price=existing.site_price if existing else None,
+            site_price_at=existing.site_price_at if existing else None,
         )
         s.merge(price)
         n += 1
     return n
+
+
+def sync_site_prices(s: Session, fetch: Callable[[list[int]], dict[int, Decimal]] | None = None) -> int:
+    """Цены на сайте WB (Москва) для всех товаров с загруженной ценой. Ключ WB не нужен."""
+    fetch = fetch or get_site_prices
+    rows = {p.nm_id: p for p in s.scalars(select(Price).where(Price.account_id == ACC))}
+    found = fetch(list(rows))
+    now = datetime.now()
+    for nm, price in found.items():
+        if nm in rows:
+            rows[nm].site_price, rows[nm].site_price_at = price, now
+    return len(found)
 
 
 def sync_commissions(client: WBClient, s: Session) -> int:
