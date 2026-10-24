@@ -32,7 +32,8 @@ if errorlevel 1 (
 )
 
 echo Проверяю библиотеки...
-uv sync --no-dev
+set "UV_PYTHON_PREFERENCE=only-managed"
+uv sync --no-dev --python 3.12
 if errorlevel 1 (
   echo Не получилось установить библиотеки. Пришлите скриншот этого окна.
   pause
@@ -45,5 +46,5 @@ echo.
 echo Торпеда работает: http://127.0.0.1:8000/
 echo Не закрывайте это окно, пока пользуетесь программой.
 echo.
-uv run --no-dev uvicorn torpeda.api.app:app --host 127.0.0.1 --port 8000
+uv run --no-dev --python 3.12 uvicorn torpeda.api.app:app --host 127.0.0.1 --port 8000
 pause
