@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from functools import lru_cache
 from urllib.parse import quote
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -222,6 +223,26 @@ def undo_bulk_cost(s: Session = Depends(get_session)) -> dict:
     s.commit()
     path.unlink()
     return {"restored": removed}
+
+
+@app.get("/api/photos/{nm_id}", include_in_schema=False)
+def product_photo(nm_id: int, s: Session = Depends(get_session)) -> Response:
+    """Фото товара: скачивается с WB один раз, дальше берётся с диска. Нет фото или связи — 404."""
+    cache = config.DATA_DIR / "photos" / f"{nm_id}.jpg"
+    if not cache.exists():
+        product = s.get(Product, (ACC, nm_id))
+        if product is None or not product.photo_url:
+            raise HTTPException(404)
+        try:
+            resp = httpx.get(product.photo_url, timeout=10, follow_redirects=True)
+            resp.raise_for_status()
+        except httpx.HTTPError:
+            raise HTTPException(404) from None
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_bytes(resp.content)
+    data = cache.read_bytes()
+    kind = "image/webp" if data[8:12] == b"WEBP" else "image/jpeg"
+    return Response(data, media_type=kind, headers={"Cache-Control": "max-age=86400"})
 
 
 @app.put("/api/products/{nm_id}/cost")
@@ -469,6 +490,13 @@ def wb_sync_services(req: PeriodRequest, client: WBClient = Depends(get_wb_clien
 def wb_sync_ads(req: PeriodRequest, client: WBClient = Depends(get_wb_client)) -> dict:
     """Реклама: статистика кампаний и списания. WB отдаёт статистику 3 раза в минуту."""
     return _analytics_sync("реклама", lambda s: sync_ads(client, s, req.date_from, req.date_to), "Продвижение")
+
+
+@app.post("/api/wb/sync-spp")
+def wb_sync_spp(client: WBClient = Depends(get_wb_client)) -> dict:
+    """Свежие заказы за последние сутки: из них берётся текущая СПП. Один запрос к WB (лимит — раз в минуту)."""
+    since = date.today() - timedelta(days=1)
+    return _analytics_sync("СПП", lambda s: {"orders": sync_orders(client, s, since)}, "Статистика")
 
 
 @app.post("/api/wb/sync-coefficients")

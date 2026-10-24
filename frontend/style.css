@@ -57,3 +57,7 @@ h1 small { font-size: 13px; font-weight: 400; color: #555; margin-left: 8px; }
 #keys-result { font-size: 13px; margin: 8px 0; padding: 0 8px; border-radius: 6px; }
 #keys-result:not(:empty) { padding: 6px 8px; }
 .key-clear { margin-bottom: 10px; }
+
+.thumb { height: 48px; width: 36px; object-fit: cover; border-radius: 4px; display: block; margin-top: 3px; }
+.spp-at { font-size: 10px; color: #666; }
+.spp-at.stale { color: #b0b0b0; }

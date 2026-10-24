@@ -53,6 +53,8 @@ const flatten = (r) => ({
   calc_price: num(r.calc_price),
   calc_discount_pct: num(r.calc_discount_pct),
   cur_seller_price: num(r.current?.seller_price),
+  spp: num(r.spp),
+  buyer_price: r.spp == null || r.current?.seller_price == null ? null : Math.round(num(r.current.seller_price) * (100 - num(r.spp))) / 100,
   cur_commission: num(r.current?.commission),
   cur_logistics: num(r.current?.logistics),
   cur_tax: num(r.current?.tax),
@@ -69,8 +71,52 @@ const flatten = (r) => ({
 
 const editable = { editable: true, cellClass: "cell-edit", type: "numericColumn" };
 
+// Ссылка на страницу товара на Wildberries, открывается в новой вкладке. Строка «Итого» остаётся текстом.
+const wbUrl = (nm) => `https://www.wildberries.ru/catalog/${nm}/detail.aspx`;
+function wbAnchor(nm) {
+  const a = document.createElement("a");
+  a.href = wbUrl(nm);
+  a.target = "_blank";
+  a.rel = "noopener";
+  return a;
+}
+const wbLink = (p) => {
+  if (!/^\d+$/.test(String(p.value ?? ""))) return p.valueFormatted ?? p.value ?? "";
+  const a = wbAnchor(p.value);
+  a.textContent = p.value;
+  return a;
+};
+const photoCell = (p) => {
+  if (!p.value) return "";
+  const a = wbAnchor(p.data.nm_id);
+  const img = document.createElement("img");
+  img.className = "thumb";
+  img.src = p.value;
+  img.loading = "lazy";
+  img.alt = "";
+  img.onerror = () => img.remove();
+  a.append(img);
+  return a;
+};
+
+// СПП меняется часто: показываем время значения, старше суток — серым с пометкой
+const sppCell = (p) => {
+  if (p.value == null) return "—";
+  const span = document.createElement("span");
+  const at = p.data.spp_at ? new Date(p.data.spp_at) : null;
+  const stale = !at || Date.now() - at.getTime() > 24 * 3600 * 1000;
+  const when = at ? at.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+  span.textContent = `${p.value.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
+  const small = document.createElement("small");
+  small.className = stale ? "spp-at stale" : "spp-at";
+  small.textContent = ` · ${when}${stale ? " устар." : ""}`;
+  span.append(small);
+  return span;
+};
+
 const productColumns = [
-  { headerName: "Артикул WB", field: "nm_id", pinned: "left", width: 120 },
+  { headerName: "Фото", field: "photo", pinned: "left", width: 64, sortable: false, filter: false, cellRenderer: photoCell },
+  { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, pinned: "left", width: 120 },
   { headerName: "Арт. продавца", field: "vendor_code", pinned: "left", width: 120 },
   { headerName: "Название", field: "title", width: 200 },
   { headerName: "Бренд", field: "brand", width: 110 },
@@ -85,6 +131,8 @@ const productColumns = [
       { headerName: "Цена до скидки", field: "price", width: 110, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Скидка", field: "discount_pct", width: 80, valueFormatter: pct, type: "numericColumn" },
       { headerName: "Цена продавца", field: "cur_seller_price", width: 110, valueFormatter: rub, type: "numericColumn" },
+      { headerName: "СПП", field: "spp", width: 110, cellRenderer: sppCell, type: "numericColumn", headerTooltip: "СПП из самого свежего заказа и время этого заказа. WB отдаёт СПП только по сделанным заказам" },
+      { headerName: "Цена с СПП", field: "buyer_price", width: 100, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn" },
       { headerName: "Комиссия", field: "cur_commission", width: 100, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Логистика", field: "cur_logistics", width: 100, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Налог", field: "cur_tax", width: 90, valueFormatter: rub, type: "numericColumn" },
@@ -113,6 +161,7 @@ let onlyChanged = false;
 
 const productsGrid = agGrid.createGrid(document.getElementById("grid-products"), {
   columnDefs: productColumns,
+  rowHeight: 56,
   defaultColDef: { sortable: true, filter: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true },
   suppressColumnVirtualisation: true,
   localeText: RU,
@@ -226,7 +275,7 @@ let pending = null;
 
 const previewGrid = agGrid.createGrid(document.getElementById("grid-preview"), {
   columnDefs: [
-    { headerName: "Артикул WB", field: "nm_id", width: 110 },
+    { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 110 },
     { headerName: "Арт. продавца", field: "vendor_code", width: 110 },
     { headerName: "Было: цена / скидка", valueGetter: (p) => `${p.data.old_price} ₽ / ${p.data.old_discount}%`, width: 150 },
     { headerName: "Станет: цена / скидка", valueGetter: (p) => `${p.data.new_price} ₽ / ${p.data.new_discount}%`, width: 160 },
@@ -290,7 +339,7 @@ document.getElementById("btn-confirm").addEventListener("dblclick", async (e) =>
 const historyGrid = agGrid.createGrid(document.getElementById("grid-history"), {
   columnDefs: [
     { headerName: "Когда", field: "sent_at", width: 170, valueFormatter: (p) => new Date(p.value).toLocaleString("ru-RU") },
-    { headerName: "Артикул WB", field: "nm_id", width: 120 },
+    { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 120 },
     { headerName: "Было", valueGetter: (p) => `${num(p.data.old_price)} ₽ / ${num(p.data.old_discount_pct)}%`, width: 150 },
     { headerName: "Стало", valueGetter: (p) => `${num(p.data.new_price)} ₽ / ${num(p.data.new_discount_pct)}%`, width: 150 },
     { headerName: "Статус", field: "status", width: 100, valueFormatter: (p) => (p.value === "sent" ? "отправлено" : "ошибка") },
@@ -322,7 +371,7 @@ document.getElementById("btn-history-refresh").addEventListener("click", loadHis
 
 const promoGrid = agGrid.createGrid(document.getElementById("grid-promo"), {
   columnDefs: [
-    { headerName: "Артикул WB", field: "nm_id", width: 120 },
+    { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 120 },
     { headerName: "Арт. продавца", field: "vendor_code", width: 120 },
     { headerName: "Участвует", field: "in_action", width: 100, valueFormatter: (p) => (p.value ? "да" : "нет") },
     { headerName: "Маржа сейчас, ₽", valueGetter: (p) => num(p.data.current?.profit), valueFormatter: rub, cellClass: signClass, width: 130 },
@@ -421,6 +470,7 @@ async function loadReport() {
       ...(c.editable ? { editable: (p) => !p.node.rowPinned, cellClass: "cell-edit", valueParser: (p) => (p.newValue === "" || p.newValue === null ? null : Number(String(p.newValue).replace(/\s/g, "").replace(",", "."))) } : {}),
       ...(c.kind === "text" ? { width: c.field === "reason" || c.field === "oper" ? 260 : 140 } : {}),
       ...(c.field === "profit" || c.field === "profit_per_unit" ? { cellClass: signClass } : {}),
+      ...(c.field === "nm_id" ? { cellRenderer: wbLink } : {}),
     })));
     reportGrid.setGridOption("rowData", data.rows);
     reportGrid.setGridOption("pinnedTopRowData", data.totals ? [data.totals] : []);
@@ -606,6 +656,33 @@ document.getElementById("btn-check").addEventListener("click", async () => {
     out.textContent = err.message;
   }
 });
+
+// «Обновить СПП»: свежие заказы за сутки. Галочка «каждый час» работает, пока программа открыта.
+async function syncSpp() {
+  setStatus("Обновляю СПП…");
+  try {
+    const res = await api("POST", "/api/wb/sync-spp");
+    await loadProducts();
+    setStatus(`СПП обновлена: заказов за сутки ${res.orders}`);
+  } catch (err) {
+    setStatus(`СПП: ${err.message}`);
+  }
+}
+document.getElementById("btn-spp").addEventListener("click", syncSpp);
+const sppHourly = document.getElementById("spp-hourly");
+let sppTimer = null;
+function setSppHourly(on) {
+  clearInterval(sppTimer);
+  sppTimer = on ? setInterval(syncSpp, 3600 * 1000) : null;
+  try {
+    localStorage.setItem("sppHourly", on ? "1" : "");
+  } catch {}
+}
+try {
+  sppHourly.checked = localStorage.getItem("sppHourly") === "1";
+} catch {}
+setSppHourly(sppHourly.checked);
+sppHourly.addEventListener("change", () => setSppHourly(sppHourly.checked));
 
 document.getElementById("btn-bulk-cost").addEventListener("click", () => {
   document.querySelector('.tab[data-tab="settings"]').click();

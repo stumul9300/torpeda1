@@ -40,6 +40,7 @@ class Product(Base):
     subject_id: Mapped[int | None] = mapped_column(Integer)
     subject_name: Mapped[str | None] = mapped_column(String(200))
     volume_l: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    photo_url: Mapped[str | None] = mapped_column(String(500))  # маленькое фото из карточки WB
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 

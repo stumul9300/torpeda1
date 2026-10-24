@@ -49,6 +49,7 @@ class FakeWB:
                             "subjectName": "Поло",
                             "dimensions": {"length": 25, "width": 15, "height": 7},
                             "sizes": [{"chrtID": 11, "techSize": "44"}, {"chrtID": 12, "techSize": "46"}],
+                            "photos": [{"big": "https://img.example/big.webp", "tm": "https://img.example/tm.webp"}],
                         }
                     ],
                     "cursor": {"updatedAt": "2026-10-20T10:00:00Z", "nmID": 418020031, "total": 1},
