@@ -6,6 +6,9 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "sqlalchemy>=2.0",
+    "python-dotenv>=1.0",
 ]
 
 [dependency-groups]
@@ -28,3 +31,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008"]  # Depends(...) в аргументах — обычный приём FastAPI
