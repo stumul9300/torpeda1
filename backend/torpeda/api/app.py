@@ -273,6 +273,11 @@ def wb_check(client: WBClient = Depends(get_wb_client)) -> dict[str, str]:
     return client.ping()
 
 
+@app.get("/api/wb/token-info")
+def wb_token_info() -> dict:
+    return diagnose.token_info(get_settings().wb_api_token)
+
+
 @app.get("/api/wb/diagnose/stocks")
 def wb_diagnose_stocks(client: WBClient = Depends(get_wb_client)) -> list[dict]:
     return diagnose.check_stocks(client)

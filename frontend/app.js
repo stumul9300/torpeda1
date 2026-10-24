@@ -612,8 +612,10 @@ document.getElementById("btn-diagnose-stocks").addEventListener("click", async (
   e.target.disabled = true;
   out.textContent = "Спрашиваю WB…";
   try {
-    const res = await api("GET", "/api/wb/diagnose/stocks");
-    out.innerHTML = res.map((r) => `<div class="diag ${r.rows ? "good" : "bad"}"><b>${esc(r.what)}</b>: ${esc(r.explanation)}
+    const [res, key] = await Promise.all([api("GET", "/api/wb/diagnose/stocks"), api("GET", "/api/wb/token-info")]);
+    const claims = Object.entries(key.claims || {}).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
+    out.innerHTML = `<div class="diag ${key.ok ? "good" : "bad"}"><b>Свойства ключа для данных</b> (сам ключ не показывается)${key.text ? ": " + esc(key.text) : ""}
+      <pre>${esc(claims) || "нет данных"}</pre></div>` + res.map((r) => `<div class="diag ${r.rows ? "good" : "bad"}"><b>${esc(r.what)}</b>: ${esc(r.explanation)}
       <pre>Запрос: ${esc(r.request)}\nОтвет WB (код ${r.status}): ${esc(r.answer) || "пусто"}</pre></div>`).join("");
   } catch (err) {
     out.textContent = err.message;

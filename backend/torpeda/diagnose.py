@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import json
+from datetime import datetime
 
 from torpeda.wb_api.client import WBClient
 
@@ -23,10 +25,10 @@ def explain(status: int, body: str, rows: int | None) -> str:
     if status in (401, 403):
         if "additional requirements" in low:
             return (
-                "У ключа тип «Базовый», а этот метод WB отдаёт только по «Персональному» ключу. "
+                "WB пишет, что ключ не отвечает дополнительным требованиям этого метода "
+                "(по документации метод принимает «Персональный» и «Сервисный» ключи). "
                 "Остатки FBO Торпеда всё равно загрузит запасным способом (медленнее, около минуты). "
-                "Чтобы работало всё и быстро, создайте в кабинете WB ключ типа «Персональный» "
-                "(Настройки → Доступ к API) с теми же категориями и вставьте его сюда."
+                "Свойства ключа — в блоке выше: пришлите его скриншот."
             )
         if "type" in low or "тип" in low:
             return (
@@ -73,3 +75,32 @@ def check_stocks(client: WBClient) -> list[dict]:
             }
         )
     return out
+
+
+# Поля ключа, которые не показываем: это номера кабинета, пользователя и самого ключа.
+HIDDEN_CLAIMS = {"id", "jti", "uid", "oid", "sid", "user", "seller"}
+
+
+def token_info(token: str) -> dict:
+    """Свойства ключа WB без самого ключа: WB-ключ — это JWT, его средняя часть читается без секрета.
+
+    Показываем как есть (без толкования), номера кабинета и пользователя скрываем."""
+    parts = (token or "").split(".")
+    if len(parts) != 3:
+        return {"ok": False, "text": "Ключ не похож на ключ WB (ожидается три части через точку)."}
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+    except (ValueError, UnicodeDecodeError):
+        return {"ok": False, "text": "Не получилось прочитать свойства ключа."}
+    claims = {}
+    for k, v in payload.items():
+        if k.lower() in HIDDEN_CLAIMS:
+            claims[k] = "скрыто"
+        elif k in ("exp", "iat", "nbf") and isinstance(v, int | float):
+            claims[k] = datetime.fromtimestamp(v).strftime("%d.%m.%Y %H:%M")
+        elif k == "s" and isinstance(v, int):
+            claims[k] = f"{v} (биты: {', '.join(str(i) for i in range(v.bit_length()) if v >> i & 1)})"
+        else:
+            claims[k] = v
+    expired = isinstance(payload.get("exp"), int | float) and payload["exp"] < datetime.now().timestamp()
+    return {"ok": not expired, "text": "Срок действия ключа истёк." if expired else "", "claims": claims}
