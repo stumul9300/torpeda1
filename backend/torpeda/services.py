@@ -161,9 +161,11 @@ def product_rows(s: Session) -> list[dict]:
     ctx = load_context(s)
     prices = {p.nm_id: p for p in s.scalars(select(Price).where(Price.account_id == ACC))}
     stocks = {
-        nm: qty
-        for nm, qty in s.execute(
-            select(Stock.nm_id, func.sum(Stock.quantity)).where(Stock.account_id == ACC).group_by(Stock.nm_id)
+        (nm, scheme): qty
+        for nm, scheme, qty in s.execute(
+            select(Stock.nm_id, Stock.scheme, func.sum(Stock.quantity))
+            .where(Stock.account_id == ACC)
+            .group_by(Stock.nm_id, Stock.scheme)
         )
     }
     rows = []
@@ -175,7 +177,8 @@ def product_rows(s: Session) -> list[dict]:
             "title": p.title,
             "brand": p.brand,
             "subject": p.subject_name,
-            "stock_fbo": int(stocks.get(p.nm_id) or 0),
+            "stock_fbo": int(stocks.get((p.nm_id, "FBO")) or 0),
+            "stock_fbs": int(stocks.get((p.nm_id, "FBS")) or 0),
             "sold_net_qty": ctx.facts.get(p.nm_id, ReportFacts()).net_qty,
             "cost": ctx.costs.get(p.nm_id),
             "price": price.price if price else None,

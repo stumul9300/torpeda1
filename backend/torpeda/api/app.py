@@ -7,12 +7,12 @@ from datetime import date
 from decimal import Decimal
 from functools import lru_cache
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, sessionmaker
 
-from torpeda import pricing, services
+from torpeda import config, costs_excel, pricing, services
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, get_settings, masked_keys, save_keys
@@ -117,6 +117,23 @@ class CostRequest(BaseModel):
     valid_from: date | None = None  # по умолчанию сегодня
 
 
+@app.get("/api/costs.xlsx")
+def export_costs(s: Session = Depends(get_session)) -> Response:
+    return Response(
+        costs_excel.export_costs(s),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="torpeda-costs-{date.today()}.xlsx"'},
+    )
+
+
+@app.post("/api/costs/import")
+async def import_costs(file: UploadFile, s: Session = Depends(get_session)) -> dict:
+    try:
+        return costs_excel.import_costs(s, await file.read())
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.put("/api/products/{nm_id}/cost")
 def set_cost(nm_id: int, req: CostRequest, s: Session = Depends(get_session)) -> dict:
     if s.get(Product, (ACC, nm_id)) is None:
@@ -179,6 +196,11 @@ def update_settings(values: dict[str, str], s: Session = Depends(get_session)) -
 
 
 # --- ключи WB ---
+
+
+@app.get("/api/info")
+def info() -> dict:
+    return {"data_dir": str(config.DATA_DIR)}
 
 
 @app.get("/api/keys")

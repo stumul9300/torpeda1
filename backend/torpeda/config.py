@@ -1,14 +1,16 @@
 """Настройки приложения.
 
-Ключи WB вводятся на вкладке «Настройки» и хранятся в backend/data/keys.json.
-Запасной способ — переменные окружения или файл backend/.env (они важнее файла ключей).
-Папка data и файл .env лежат только на компьютере пользователя и не попадают в git (.gitignore).
+Ключи WB (keys.json) и база (torpeda.db) лежат в постоянной папке вне программы:
+на Windows это папка Torpeda внутри %LOCALAPPDATA%, поэтому обновление программы их не стирает.
+Другую папку можно задать переменной TORPEDA_DATA_DIR.
+Запасной способ задать ключи — переменные окружения или файл backend/.env (они важнее файла ключей).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,12 +18,36 @@ from dotenv import load_dotenv
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
-DATA_DIR = BACKEND_DIR / "data"
+
+
+def default_data_dir() -> Path:
+    if custom := os.getenv("TORPEDA_DATA_DIR"):
+        return Path(custom)
+    if local := os.getenv("LOCALAPPDATA"):  # Windows
+        return Path(local) / "Torpeda"
+    return Path(os.getenv("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "torpeda"
+
+
+DATA_DIR = default_data_dir()
 KEYS_FILE = DATA_DIR / "keys.json"
+OLD_DATA_DIR = BACKEND_DIR / "data"  # до версии с постоянной папкой данные лежали здесь
+DATA_FILES = ("keys.json", "torpeda.db")
 
 load_dotenv(BACKEND_DIR / ".env")
 
 KEY_NAMES = {"read": "WB_API_TOKEN", "prices": "WB_PRICES_TOKEN"}
+
+
+def migrate_old_data() -> list[str]:
+    """Один раз переносит ключи и базу из старой папки backend/data. Уже перенесённое не трогает."""
+    moved = []
+    for name in DATA_FILES:
+        old, new = OLD_DATA_DIR / name, DATA_DIR / name
+        if old.exists() and not new.exists():
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(old, new)
+            moved.append(name)
+    return moved
 
 
 def read_keys_file() -> dict[str, str]:
@@ -62,6 +88,8 @@ class Settings:
 
 
 def get_settings() -> Settings:
+    migrate_old_data()
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     default_db = DATA_DIR / "torpeda.db"
     return Settings(
         wb_api_token=_key("read"),

@@ -34,4 +34,4 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
 .settings h2 { font-size: 16px; margin: 8px 0 0; }
 #tab-settings { display: none; }
-#tab-settings.active { display: flex; gap: 48px; align-items: flex-start; }
+#tab-settings.active { display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start; }

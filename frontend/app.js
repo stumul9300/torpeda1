@@ -74,7 +74,8 @@ const productColumns = [
   { headerName: "Название", field: "title", width: 200 },
   { headerName: "Бренд", field: "brand", width: 110 },
   { headerName: "Предмет", field: "subject", width: 120 },
-  { headerName: "Остаток FBO", field: "stock_fbo", width: 110, type: "numericColumn" },
+  { headerName: "Ост. FBO", field: "stock_fbo", width: 90, type: "numericColumn" },
+  { headerName: "Ост. FBS", field: "stock_fbs", width: 90, type: "numericColumn" },
   { headerName: "Продано за период", field: "sold_net_qty", width: 110, type: "numericColumn" },
   { headerName: "Себест.", field: "cost", width: 100, valueFormatter: rub, ...editable },
   {
@@ -127,7 +128,6 @@ const productsGrid = agGrid.createGrid(document.getElementById("grid-products"),
   onCellValueChanged: saveCell,
 });
 
-// остаток FBS пока не загружается; когда появится, учтётся здесь же
 const stockTotal = (r) => (r.stock_fbo || 0) + (r.stock_fbs || 0);
 
 async function loadProducts() {
@@ -384,6 +384,32 @@ document.getElementById("btn-check").addEventListener("click", async () => {
   } catch (err) {
     out.textContent = err.message;
   }
+});
+
+document.getElementById("costs-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const out = document.getElementById("costs-result");
+  out.textContent = "Загружаю…";
+  const body = new FormData();
+  body.append("file", file);
+  try {
+    const resp = await fetch("/api/costs/import", { method: "POST", body });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) throw new Error((data && data.detail) || `Ошибка ${resp.status}`);
+    const lines = [`Обновлено: ${data.updated}`, `Без изменений: ${data.unchanged}`];
+    if (data.not_found.length) lines.push(`Нет в таблице товаров: ${data.not_found.length} (${data.not_found.slice(0, 10).join(", ")})`);
+    if (data.errors.length) lines.push(...data.errors.slice(0, 10));
+    out.textContent = lines.join("\n");
+    await loadProducts();
+  } catch (err) {
+    out.textContent = err.message;
+  }
+  e.target.value = "";
+});
+
+api("GET", "/api/info").then((i) => {
+  document.getElementById("data-dir").textContent = `Ключи, себестоимость и журнал цен хранятся в папке ${i.data_dir}. Обновление программы их не стирает.`;
 });
 
 // Первый запуск без ключа — сразу на вкладку с полем для ключа

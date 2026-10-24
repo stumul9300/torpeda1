@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from .models import DEFAULT_ACCOUNT_ID, DEFAULT_SETTINGS, Account, Base, Setting
+from .models import DEFAULT_ACCOUNT_ID, DEFAULT_SETTINGS, Account, Base, Setting, Stock
 
 
 def make_engine(url: str) -> Engine:
@@ -15,8 +15,17 @@ def make_engine(url: str) -> Engine:
     return create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
 
 
+def _drop_outdated_snapshots(engine: Engine) -> None:
+    """Таблица остатков — снимок, который заново заполняется при загрузке из WB.
+    Если в старой базе у неё другие колонки, проще пересоздать её, чем переделывать."""
+    insp = inspect(engine)
+    if insp.has_table("stocks") and "scheme" not in {c["name"] for c in insp.get_columns("stocks")}:
+        Stock.__table__.drop(engine)
+
+
 def init_db(engine: Engine) -> sessionmaker[Session]:
     """Создаёт таблицы, кабинет по умолчанию и настройки, если их ещё нет."""
+    _drop_outdated_snapshots(engine)
     Base.metadata.create_all(engine)
     factory = sessionmaker(engine, expire_on_commit=False)
     with factory() as s:

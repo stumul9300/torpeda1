@@ -65,6 +65,17 @@
       <pre id="check-result"></pre>
     </form>
 
+    <div class="settings">
+      <h2>Себестоимость в Excel</h2>
+      <p class="hint">Запасная копия себестоимости. Загрузить можно и свой файл: нужны колонки «Артикул WB» (или «Артикул продавца») и «Себестоимость».</p>
+      <a href="/api/costs.xlsx" download><button type="button">Скачать себестоимость в Excel</button></a>
+      <label>Загрузить себестоимость из Excel (.xlsx)
+        <input id="costs-file" type="file" accept=".xlsx">
+      </label>
+      <pre id="costs-result"></pre>
+      <p class="hint" id="data-dir"></p>
+    </div>
+
     <form id="settings-form" class="settings">
       <h2>Расчёт</h2>
       <label>Схема для комиссии

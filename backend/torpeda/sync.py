@@ -107,13 +107,15 @@ def sync_commissions(client: WBClient, s: Session) -> int:
     return len(rows)
 
 
-def sync_stocks(client: WBClient, s: Session, now: datetime) -> int:
-    rows = client.get_stocks(date(2019, 6, 20))  # самая ранняя дата = все остатки
-    s.execute(delete(Stock).where(Stock.account_id == ACC))
+def sync_stocks(client: WBClient, s: Session, now: datetime, scheme: str) -> int:
+    """Снимок остатков: FBO — склады WB, FBS — склады продавца. Старый снимок этой схемы заменяется."""
+    rows = list(client.iter_stocks("wb" if scheme == "FBO" else "seller"))
+    s.execute(delete(Stock).where(Stock.account_id == ACC, Stock.scheme == scheme))
     for r in rows:
         s.add(
             Stock(
                 account_id=ACC,
+                scheme=scheme,
                 nm_id=r["nmId"],
                 warehouse=r.get("warehouseName") or "",
                 quantity=r.get("quantity") or 0,
@@ -232,6 +234,19 @@ def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, i
     return len(promos), items
 
 
+# какую категорию включить у ключа, если WB отказал в доступе
+KEY_CATEGORY = {
+    "товары": "Контент",
+    "цены": "Цены и скидки",
+    "остатки FBO": "Аналитика",
+    "остатки FBS": "Аналитика",
+    "заказы": "Статистика",
+    "продажи": "Статистика",
+    "финотчёт": "Статистика",
+    "акции": "Цены и скидки",
+}
+
+
 def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, now: datetime | None = None) -> dict:
     """Загружает всё по очереди. Ошибка одного раздела не мешает остальным."""
     now = now or datetime.now()
@@ -240,7 +255,8 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
         "товары": lambda s: sync_products(client, s),
         "цены": lambda s: sync_prices(client, s),
         "комиссии": lambda s: sync_commissions(client, s),
-        "остатки": lambda s: sync_stocks(client, s, now),
+        "остатки FBO": lambda s: sync_stocks(client, s, now, "FBO"),
+        "остатки FBS": lambda s: sync_stocks(client, s, now, "FBS"),
         "заказы": lambda s: sync_orders(client, s, date_from),
         "продажи": lambda s: sync_sales(client, s, date_from),
         "финотчёт": lambda s: sync_report(client, s, date_from, now.date()),
@@ -252,6 +268,11 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
             try:
                 result[name] = step(s)
                 s.commit()
+            except WBAuthError as e:
+                s.rollback()
+                category = KEY_CATEGORY.get(name)
+                hint = f"у ключа нет доступа, включите категорию «{category}». " if category else ""
+                result[name] = f"ошибка: {hint}{e}"
             except WBError as e:
                 s.rollback()
                 result[name] = f"ошибка: {e}"

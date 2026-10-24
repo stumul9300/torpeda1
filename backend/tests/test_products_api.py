@@ -40,6 +40,7 @@ def test_manual_cost_and_margin(synced):
     assert r["missing"] == []
     assert r["sold_net_qty"] == 9  # 10 продаж − 1 возврат
     assert r["stock_fbo"] == 45
+    assert r["stock_fbs"] == 7
     cur = r["current"]
     assert cur["seller_price"] == "3073.80"
     assert cur["commission"] == "1337.10"
