@@ -278,6 +278,7 @@ class FunnelRow(Base):
     buyout_sum: Mapped[Decimal] = mapped_column(Money, default=0)
     cancel_count: Mapped[int] = mapped_column(Integer, default=0)
     cancel_sum: Mapped[Decimal] = mapped_column(Money, default=0)
+    localization_pct: Mapped[int | None] = mapped_column(Integer)  # заказы со склада в регионе покупателя
     loaded_at: Mapped[datetime] = mapped_column(DateTime)
 
 
@@ -345,6 +346,24 @@ class AdCost(Base):
     payment_type: Mapped[str | None] = mapped_column(String(100))
     doc_num: Mapped[int | None] = mapped_column(Integer)
     amount: Mapped[Decimal] = mapped_column(Money, default=0)
+
+
+class AcceptanceCoef(Base):
+    """Коэффициенты приёмки на складах WB на ближайшие дни: −1 — приёмки нет, 0 — бесплатно, 2 — ×2 к тарифу."""
+
+    __tablename__ = "acceptance_coefs"
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    warehouse_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    box_type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    warehouse: Mapped[str | None] = mapped_column(String(200))
+    box_type: Mapped[str | None] = mapped_column(String(100))
+    coefficient: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    allow_unload: Mapped[bool] = mapped_column(Boolean, default=False)
+    storage_coef: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))  # %
+    delivery_coef: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))  # %
+    loaded_at: Mapped[datetime] = mapped_column(DateTime)
 
 
 class SyncLog(Base):

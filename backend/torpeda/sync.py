@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from torpeda.config import get_settings
 from torpeda.db import DEFAULT_ACCOUNT_ID, init_db, make_engine
 from torpeda.db.models import (
+    AcceptanceCoef,
     AcceptanceRow,
     AdCost,
     AdStat,
@@ -308,6 +309,7 @@ def sync_funnel(client: WBClient, s: Session, date_from: date, date_to: date, no
                 buyout_sum=_dec(st.get("buyoutSum")) or 0,
                 cancel_count=st.get("cancelCount") or 0,
                 cancel_sum=_dec(st.get("cancelSum")) or 0,
+                localization_pct=st.get("localizationPercent"),
                 loaded_at=now,
             )
         )
@@ -362,6 +364,35 @@ def sync_acceptance(client: WBClient, s: Session, date_from: date, date_to: date
         n += len(rows)
         s.commit()
     return n
+
+
+def sync_acceptance_coefs(client: WBClient, s: Session, now: datetime | None = None) -> int:
+    """Коэффициенты приёмки: снимок на ближайшие дни, прежний заменяется."""
+    now = now or datetime.now()
+    rows = client.get_acceptance_coefficients()
+    s.execute(delete(AcceptanceCoef).where(AcceptanceCoef.account_id == ACC))
+    seen = set()
+    for r in rows:
+        key = (_d(r.get("date")), r.get("warehouseID") or 0, r.get("boxTypeID") or 0)
+        if key in seen or key[0] is None:
+            continue
+        seen.add(key)
+        s.add(
+            AcceptanceCoef(
+                account_id=ACC,
+                date=key[0],
+                warehouse_id=key[1],
+                box_type_id=key[2],
+                warehouse=r.get("warehouseName"),
+                box_type=r.get("boxTypeName"),
+                coefficient=_dec(r.get("coefficient")),
+                allow_unload=bool(r.get("allowUnload")),
+                storage_coef=_dec(r.get("storageCoef")),
+                delivery_coef=_dec(r.get("deliveryCoef")),
+                loaded_at=now,
+            )
+        )
+    return len(seen)
 
 
 def sync_ads(client: WBClient, s: Session, date_from: date, date_to: date) -> dict:

@@ -89,6 +89,17 @@
           <option value="ads|day">Реклама по дням</option>
           <option value="ad_costs|">Списания за рекламу</option>
         </optgroup>
+        <optgroup label="Прочее">
+          <option value="geography|okrug">Заказы по округам</option>
+          <option value="geography|region">Заказы по регионам</option>
+          <option value="geography|warehouse">Откуда и куда везут заказы</option>
+          <option value="coefficients|box">Коэффициенты приёмки: короба</option>
+          <option value="coefficients|pallet">Коэффициенты приёмки: монопаллеты</option>
+          <option value="coefficients|safe">Коэффициенты приёмки: суперсейф</option>
+          <option value="joint_sales|">Совместные покупки</option>
+          <option value="rides|">Покатушки без продаж</option>
+          <option value="price_history|">История цен</option>
+        </optgroup>
       </select>
       <label>с <input id="report-from" type="date"></label>
       <label>по <input id="report-to" type="date"></label>
@@ -99,6 +110,7 @@
       <button id="btn-orders-sync" title="WB хранит заказы только за последние 90 дней">Загрузить заказы и продажи из WB</button>
       <button id="btn-funnel-sync" title="WB считает воронку за весь выбранный период, не старше года">Загрузить воронку из WB за эти даты</button>
       <button id="btn-ads-sync" title="Нужна категория ключа «Продвижение». WB отдаёт статистику медленно">Загрузить рекламу из WB за эти даты</button>
+      <button id="btn-coef-sync" title="Прогноз WB на ближайшие дни">Загрузить коэффициенты из WB</button>
       <button id="btn-services-sync" title="WB готовит каждый отчёт до минуты, за месяц загрузка займёт несколько минут">Загрузить хранение и приёмку из WB</button>
     </div>
     <p class="hint" id="report-notes"></p>

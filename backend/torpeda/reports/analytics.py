@@ -69,7 +69,7 @@ def funnel(s: Session, date_from: date, date_to: date) -> Table:
     rows = []
     total = dict.fromkeys(FUNNEL_SUM, 0)
     for f in rows_db:
-        r = _nm(f.nm_id, titles) | {k: getattr(f, k) for k in FUNNEL_SUM}
+        r = _nm(f.nm_id, titles) | {k: getattr(f, k) for k in FUNNEL_SUM} | {"localization": f.localization_pct}
         for k in FUNNEL_SUM:
             total[k] += r[k]
         rows.append(_conversions(r))
@@ -87,6 +87,7 @@ def funnel(s: Session, date_from: date, date_to: date) -> Table:
         Column("cancel_count", "Отмены и возвраты, шт", "int"),
         Column("cancel_sum", "Отмены и возвраты, руб"),
         Column("buyout_pct", "Процент выкупа, %", "pct"),
+        Column("localization", "Локализация, %", "pct"),
     ]
     notes = ["Воронку считает WB. Выкупы и отмены — по заказам этих дат, часть ещё может быть в пути."]
     if not rows_db:

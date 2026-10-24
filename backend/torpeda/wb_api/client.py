@@ -18,6 +18,8 @@
   /api/v1/paid_storage и /api/v1/acceptance_report                             (Аналитика)
 - реклама: advert-api, списки кампаний /adv/v1/promotion/count, статистика /adv/v3/fullstats,
   история затрат /adv/v1/upd                                                     (Продвижение)
+- коэффициенты приёмки: common-api /api/tariffs/v1/acceptance/coefficients      (Тарифы),
+  запасной способ — supplies-api /api/v1/acceptance/coefficients                 (Поставки)
 - календарь акций и товары акции: dp-calendar-api                              (Цены и скидки)
 
 Ответы WB возвращаются как есть (dict/list), разбор — в torpeda.sync.
@@ -40,6 +42,7 @@ CALENDAR = "https://dp-calendar-api.wildberries.ru"
 ANALYTICS = "https://seller-analytics-api.wildberries.ru"
 FINANCE = "https://finance-api.wildberries.ru"
 ADVERT = "https://advert-api.wildberries.ru"
+SUPPLIES = "https://supplies-api.wildberries.ru"
 
 # Новый API финотчётов (finance-api) отдаёт поля в camelCase; приводим к именам старого
 # reportDetailByPeriod, чтобы разбор в torpeda.sync был один для обоих источников.
@@ -372,6 +375,19 @@ class WBClient:
     def iter_acceptance(self, date_from: date, date_to: date) -> Iterator[tuple[date, date, list]]:
         """Платная приёмка. Не больше 31 дня за раз."""
         return self._chunked("acceptance_report", date_from, date_to, 31)
+
+    # --- поставки ---
+
+    def get_acceptance_coefficients(self) -> list[dict]:
+        """Коэффициенты приёмки на 14 дней по всем складам. WB перенёс метод в «Тарифы»; старый адрес —
+        запасной вариант для ключей с категорией «Поставки»."""
+        try:
+            return self._request("GET", f"{COMMON}/api/tariffs/v1/acceptance/coefficients") or []
+        except WBError as first:
+            try:
+                return self._request("GET", f"{SUPPLIES}/api/v1/acceptance/coefficients") or []
+            except WBError as e:
+                raise type(e)(f"{first} | запасной способ: {e}") from e
 
     # --- реклама ---
 
