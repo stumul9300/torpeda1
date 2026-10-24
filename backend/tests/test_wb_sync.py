@@ -18,7 +18,7 @@ def test_token_is_sent_in_header(wb_client, fake_wb):
 
 
 def test_missing_token_has_clear_message():
-    with pytest.raises(WBAuthError, match="backend/.env"):
+    with pytest.raises(WBAuthError, match="Настройки"):
         WBClient("")
 
 

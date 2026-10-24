@@ -55,7 +55,7 @@ class WBClient:
         max_retries: int = 5,
     ):
         if not token:
-            raise WBAuthError("Не задан ключ WB. Положите его в файл backend/.env (см. docs/setup-api.md).")
+            raise WBAuthError("Не задан ключ WB. Вставьте его на вкладке «Настройки».")
         self._http = httpx.Client(headers={"Authorization": token}, timeout=60, transport=transport)
         self._sleep = sleep
         self._max_retries = max_retries
