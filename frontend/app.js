@@ -607,6 +607,44 @@ document.getElementById("btn-check").addEventListener("click", async () => {
   }
 });
 
+document.getElementById("btn-bulk-cost").addEventListener("click", () => {
+  document.querySelector('.tab[data-tab="settings"]').click();
+  document.getElementById("bulk-cost").scrollIntoView({ behavior: "smooth" });
+});
+
+document.getElementById("bulk-cost-save").addEventListener("click", async () => {
+  const out = document.getElementById("bulk-cost-result");
+  const cost = Number(document.getElementById("bulk-cost-value").value);
+  if (!(cost >= 0) || document.getElementById("bulk-cost-value").value === "") {
+    out.textContent = "Введите сумму себестоимости.";
+    return;
+  }
+  const all = document.querySelector('input[name="bulk-cost-who"]:checked').value === "all";
+  const question = all
+    ? `Записать себестоимость ${cost} руб ВСЕМ товарам? Прежние значения будут заменены (их можно вернуть кнопкой «Вернуть прошлое»).`
+    : `Записать себестоимость ${cost} руб товарам, у которых её нет?`;
+  if (!confirm(question)) return;
+  try {
+    const res = await api("POST", "/api/costs/bulk", { cost, only_empty: !all, past_too: document.getElementById("bulk-cost-past").checked });
+    out.textContent = `Записано товаров: ${res.written}.`;
+    await loadProducts();
+  } catch (err) {
+    out.textContent = err.message;
+  }
+});
+
+document.getElementById("bulk-cost-undo").addEventListener("click", async () => {
+  const out = document.getElementById("bulk-cost-result");
+  if (!confirm("Отменить последнюю массовую запись себестоимости?")) return;
+  try {
+    const res = await api("POST", "/api/costs/undo");
+    out.textContent = `Прежняя себестоимость возвращена, товаров: ${res.restored}.`;
+    await loadProducts();
+  } catch (err) {
+    out.textContent = err.message;
+  }
+});
+
 document.getElementById("costs-file").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
