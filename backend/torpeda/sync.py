@@ -38,7 +38,7 @@ from torpeda.db.models import (
     StorageRow,
     SyncLog,
 )
-from torpeda.wb_api.client import WBAuthError, WBClient, WBError
+from torpeda.wb_api.client import BASE_TOKEN_HINT, WBAuthError, WBClient, WBError, is_token_type_error
 
 ACC = DEFAULT_ACCOUNT_ID
 
@@ -117,9 +117,41 @@ def sync_commissions(client: WBClient, s: Session) -> int:
     return len(rows)
 
 
+REMAINS_TO_CLIENT = "В пути до получателей"
+REMAINS_FROM_CLIENT = "В пути возвраты на склад WB"
+
+
+def _remains_rows(items: list[dict]) -> list[dict]:
+    """Отчёт об остатках (warehouse_remains) в виде строк stocks-report: склад, количество, в пути."""
+    rows = []
+    for it in items:
+        to_client = from_client = 0
+        for w in it.get("warehouses") or []:
+            name, qty = w.get("warehouseName") or "", w.get("quantity") or 0
+            if name == REMAINS_TO_CLIENT:
+                to_client += qty
+            elif name == REMAINS_FROM_CLIENT:
+                from_client += qty
+            elif not name.startswith(("Всего", "В пути")):
+                rows.append({"nmId": it["nmId"], "warehouseName": name, "quantity": qty})
+        if to_client or from_client:
+            rows.append({"nmId": it["nmId"], "warehouseName": "в пути", "quantity": 0,
+                         "inWayToClient": to_client, "inWayFromClient": from_client})  # fmt: skip
+    return rows
+
+
 def sync_stocks(client: WBClient, s: Session, now: datetime, scheme: str) -> int:
-    """Снимок остатков: FBO — склады WB, FBS — склады продавца. Старый снимок этой схемы заменяется."""
-    rows = list(client.iter_stocks("wb" if scheme == "FBO" else "seller"))
+    """Снимок остатков: FBO — склады WB, FBS — склады продавца. Старый снимок этой схемы заменяется.
+
+    «Базовый» ключ WB к быстрому методу остатков не пускает: тогда FBO берём из отчёта об остатках."""
+    try:
+        rows = list(client.iter_stocks("wb" if scheme == "FBO" else "seller"))
+    except WBAuthError as e:
+        if not is_token_type_error(str(e)):
+            raise
+        if scheme == "FBS":
+            raise WBAuthError(f"{BASE_TOKEN_HINT} Остатки FBO при этом загружаются запасным способом.") from e
+        rows = _remains_rows(client.get_warehouse_remains())
     s.execute(delete(Stock).where(Stock.account_id == ACC, Stock.scheme == scheme))
     for r in rows:
         s.add(
@@ -535,7 +567,10 @@ def sync_all(
             except WBAuthError as e:
                 s.rollback()
                 category = KEY_CATEGORY.get(name)
-                hint = f"у ключа нет доступа, включите категорию «{category}». " if category else ""
+                if is_token_type_error(str(e)) or BASE_TOKEN_HINT in str(e):
+                    hint = "" if BASE_TOKEN_HINT in str(e) else BASE_TOKEN_HINT + " "
+                else:
+                    hint = f"у ключа нет доступа, включите категорию «{category}». " if category else ""
                 result[name] = f"ошибка: {hint}{e}"
             except WBError as e:
                 s.rollback()

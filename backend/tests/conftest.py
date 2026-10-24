@@ -25,6 +25,7 @@ class FakeWB:
         self.finance_enabled = True  # False — у ключа нет категории «Финансы», работает запасной способ
         self.analytics_enabled = True  # False — у ключа нет категории «Аналитика»
         self.advert_enabled = True  # False — у ключа нет категории «Продвижение»
+        self.base_token = False  # True — ключ типа «Базовый»: быстрый метод остатков WB не пускает
         self.tariffs_coefs = True  # False — новый адрес коэффициентов недоступен, работает запасной
         self.task_polls: dict[str, int] = {}
 
@@ -77,6 +78,9 @@ class FakeWB:
                     ]
                 },
             )
+        if path.startswith("/api/analytics/v1/stocks-report/") and self.base_token:
+            return httpx.Response(403, json={"status": 403, "title": "Forbidden",
+                                             "detail": "token does not satisfy additional requirements"})  # fmt: skip
         if path == "/api/analytics/v1/stocks-report/wb-warehouses":
             item = {
                 "nmId": 418020031,
@@ -200,7 +204,8 @@ class FakeWB:
             if not self.advert_enabled:
                 return httpx.Response(401, json={"title": "unauthorized", "detail": "token scope not allowed"})
             return self.advert(request, path)
-        if path.startswith(("/api/analytics/v3/", "/api/v1/paid_storage", "/api/v1/acceptance_report")):
+        if path.startswith(("/api/analytics/v3/", "/api/v1/paid_storage", "/api/v1/acceptance_report",
+                            "/api/v1/warehouse_remains")):  # fmt: skip
             if not self.analytics_enabled:
                 return httpx.Response(403, json={"title": "Forbidden", "detail": "token scope not allowed"})
             return self.analytics(request, path)
@@ -254,10 +259,10 @@ class FakeWB:
                     "buyoutCount": 30, "buyoutSum": 60000, "cancelCount": 10, "cancelSum": 20000, "addToWishlist": 15}
             item = {"product": {"nmId": 418020031, "vendorCode": "8447"}, "statistic": {"selected": stat}}
             return httpx.Response(200, json={"data": {"products": [item]}, "currency": "RUB"})  # fmt: skip
-        kind = "paid_storage" if "paid_storage" in path else "acceptance_report"
+        kind = path.split("/")[3]
         if path == f"/api/v1/{kind}":
             q = request.url.params
-            task = f"{kind}:{q['dateFrom']}:{q['dateTo']}"
+            task = f"{kind}:{q.get('dateFrom', '')}:{q.get('dateTo', '')}"
             return httpx.Response(200, json={"data": {"taskId": task}})
         task = path.split("/")[5]
         if path.endswith("/status"):
@@ -265,7 +270,15 @@ class FakeWB:
             status = "done" if self.task_polls[task] > 1 else "processing"
             return httpx.Response(200, json={"data": {"id": task, "status": status}})
         _, start, _end = task.split(":")
-        if kind == "paid_storage":
+        if kind == "warehouse_remains":
+            assert request.url.params.get("groupByNm") is None  # параметры — только при создании
+            rows = [{"nmId": 418020031, "vendorCode": "8447", "techSize": "42", "warehouses": [
+                {"warehouseName": "В пути до получателей", "quantity": 3},
+                {"warehouseName": "В пути возвраты на склад WB", "quantity": 1},
+                {"warehouseName": "Всего находится на складах", "quantity": 45},
+                {"warehouseName": "Коледино", "quantity": 40},
+                {"warehouseName": "Тула", "quantity": 5}]}]  # fmt: skip
+        elif kind == "paid_storage":
             rows = [{"date": start, "warehouse": "Коледино", "nmId": 418020031, "size": "42", "volume": 2.5,
                      "warehousePrice": 7.65, "barcodesCount": 3, "calcType": "короба"}]  # fmt: skip
         else:
