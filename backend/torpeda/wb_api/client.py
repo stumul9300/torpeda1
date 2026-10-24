@@ -213,16 +213,22 @@ class WBClient:
             offset += page_size
 
     def get_orders(self, date_from: date) -> list[dict]:
-        return (
-            self._request("GET", f"{STATISTICS}/api/v1/supplier/orders", params={"dateFrom": date_from.isoformat()})
-            or []
-        )
+        return self._statistics_changes("orders", date_from)
 
     def get_sales(self, date_from: date) -> list[dict]:
-        return (
-            self._request("GET", f"{STATISTICS}/api/v1/supplier/sales", params={"dateFrom": date_from.isoformat()})
-            or []
-        )
+        return self._statistics_changes("sales", date_from)
+
+    def _statistics_changes(self, kind: str, date_from: date, page_size: int = 80_000) -> list[dict]:
+        """Заказы или продажи, изменённые с даты. WB отдаёт до 80 000 строк за раз; следующую порцию
+        просим с lastChangeDate последней строки."""
+        out: list[dict] = []
+        since = date_from.isoformat()
+        while True:
+            page = self._request("GET", f"{STATISTICS}/api/v1/supplier/{kind}", params={"dateFrom": since}) or []
+            out.extend(page)
+            if len(page) < page_size or not page[-1].get("lastChangeDate"):
+                return out
+            since = page[-1]["lastChangeDate"]
 
     def iter_report_detail(self, date_from: date, date_to: date, page_size: int = 100_000) -> Iterator[dict]:
         """Детализация еженедельных финотчётов, постранично по rrd_id.

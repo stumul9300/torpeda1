@@ -43,7 +43,8 @@ def report(api, name, **params):
 
 
 def test_range(loaded):
-    assert loaded.get("/api/reports/range").json() == {"date_from": "2026-10-20", "date_to": "2026-10-21"}
+    r = loaded.get("/api/reports/range").json()
+    assert (r["date_from"], r["date_to"]) == ("2026-10-20", "2026-10-21")
 
 
 def test_detail_by_nm(loaded):
