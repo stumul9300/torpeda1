@@ -14,6 +14,7 @@ from torpeda.db import DEFAULT_ACCOUNT_ID
 from torpeda.db.models import (
     CommissionRate,
     CostPrice,
+    Order,
     Price,
     Product,
     Promotion,
@@ -157,8 +158,19 @@ def _result_dict(ctx: Context, r: UnitResult) -> dict:
     return {**rr.__dict__, "status": status(ctx, r)}
 
 
+def last_spp(s: Session) -> dict[int, Decimal]:
+    """Последняя известная СПП по артикулу: из самого свежего заказа без отмены, где WB её указал."""
+    q = (
+        select(Order.nm_id, Order.spp)
+        .where(Order.account_id == ACC, Order.is_cancel.is_(False), Order.spp.is_not(None))
+        .order_by(Order.date)
+    )
+    return {nm: spp for nm, spp in s.execute(q)}
+
+
 def product_rows(s: Session) -> list[dict]:
     ctx = load_context(s)
+    spp = last_spp(s)
     prices = {p.nm_id: p for p in s.scalars(select(Price).where(Price.account_id == ACC))}
     stocks = {
         (nm, scheme): qty
@@ -184,6 +196,7 @@ def product_rows(s: Session) -> list[dict]:
             "cost": ctx.costs.get(p.nm_id),
             "price": price.price if price else None,
             "discount_pct": price.discount_pct if price else None,
+            "spp": spp.get(p.nm_id),
             "calc_price": price.calc_price if price else None,
             "calc_discount_pct": price.calc_discount_pct if price else None,
             "current": None,

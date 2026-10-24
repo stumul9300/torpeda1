@@ -27,3 +27,9 @@ def test_photo_missing_is_404(api, monkeypatch):
     monkeypatch.setattr(httpx, "get", broken)
     assert api.get(row["photo"]).status_code == 404
     assert api.get("/api/photos/1").status_code == 404
+
+
+def test_products_have_last_spp(api):
+    api.post("/api/wb/sync")
+    row = api.get("/api/products").json()[0]
+    assert float(row["spp"]) == 29
