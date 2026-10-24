@@ -20,6 +20,8 @@ from torpeda.config import get_settings
 from torpeda.db import DEFAULT_ACCOUNT_ID, init_db, make_engine
 from torpeda.db.models import (
     AcceptanceRow,
+    AdCost,
+    AdStat,
     CommissionRate,
     FunnelRow,
     Order,
@@ -360,6 +362,50 @@ def sync_acceptance(client: WBClient, s: Session, date_from: date, date_to: date
         n += len(rows)
         s.commit()
     return n
+
+
+def sync_ads(client: WBClient, s: Session, date_from: date, date_to: date) -> dict:
+    """Реклама за даты: статистика по товарам и дням и списания. Прежние данные за эти дни заменяются."""
+    ids = client.get_advert_ids(date_from)
+    stats: dict[tuple, dict] = {}
+    for camp in client.iter_ad_fullstats(ids, date_from, date_to) if ids else []:
+        for day in camp.get("days") or []:
+            d = _d(day.get("date"))
+            for app_ in day.get("apps") or []:
+                for nm in app_.get("nms") or []:
+                    key = (camp["advertId"], d, nm.get("nmId") or 0)
+                    a = stats.setdefault(key, {"views": 0, "clicks": 0, "atbs": 0, "orders": 0, "shks": 0,
+                                               "spend": Decimal(0), "orders_sum": Decimal(0)})  # fmt: skip
+                    for f in ("views", "clicks", "atbs", "orders", "shks"):
+                        a[f] += nm.get(f) or 0
+                    a["spend"] += _dec(nm.get("sum")) or 0
+                    a["orders_sum"] += _dec(nm.get("sum_price")) or 0
+    costs = list(client.iter_ad_costs(date_from, date_to))
+
+    s.execute(delete(AdStat).where(AdStat.account_id == ACC, AdStat.date >= date_from, AdStat.date <= date_to))
+    for (advert_id, d, nm_id), a in stats.items():
+        s.add(AdStat(account_id=ACC, advert_id=advert_id, date=d, nm_id=nm_id, **a))
+    s.execute(
+        delete(AdCost).where(
+            AdCost.account_id == ACC,
+            AdCost.at >= datetime.combine(date_from, datetime.min.time()),
+            AdCost.at < datetime.combine(date_to + timedelta(days=1), datetime.min.time()),
+        )
+    )
+    for c in costs:
+        s.add(
+            AdCost(
+                account_id=ACC,
+                at=_dt(c.get("updTime")) or datetime.combine(date_from, datetime.min.time()),
+                advert_id=c.get("advertId") or 0,
+                campaign=c.get("campName"),
+                advert_type=c.get("advertType"),
+                payment_type=c.get("paymentType"),
+                doc_num=c.get("updNum"),
+                amount=_dec(c.get("updSum")) or 0,
+            )
+        )
+    return {"campaigns": len(ids), "stats": len(stats), "costs": len(costs)}
 
 
 def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, int]:

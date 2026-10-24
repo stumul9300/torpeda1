@@ -29,10 +29,11 @@ from torpeda.db.models import (
     Setting,
     SyncLog,
 )
-from torpeda.reports import Table, analytics, finance, orders, stocks
+from torpeda.reports import Table, ads, analytics, finance, orders, stocks
 from torpeda.sync import (
     log_sync,
     sync_acceptance,
+    sync_ads,
     sync_all,
     sync_funnel,
     sync_orders,
@@ -296,15 +297,15 @@ def wb_sync_orders(req: PeriodRequest, client: WBClient = Depends(get_wb_client)
     return {"orders": n_orders, "sales": n_sales}
 
 
-def _analytics_sync(section: str, fn) -> dict:
-    """Загрузка из раздела «Аналитика»: понятная ошибка и запись в журнал «Что пошло не так»."""
+def _analytics_sync(section: str, fn, category: str = "Аналитика") -> dict:
+    """Загрузка за период: понятная ошибка и запись в журнал «Что пошло не так»."""
     with session_factory()() as s:
         try:
             result = fn(s)
             s.commit()
         except WBAuthError as e:
             s.rollback()
-            msg = f"у ключа нет доступа, включите категорию «Аналитика». {e}"
+            msg = f"у ключа нет доступа, включите категорию «{category}». {e}"
             log_sync(s, section, False, msg)
             s.commit()
             raise HTTPException(502, msg) from e
@@ -336,6 +337,12 @@ def wb_sync_services(req: PeriodRequest, client: WBClient = Depends(get_wb_clien
     )
 
 
+@app.post("/api/wb/sync-ads")
+def wb_sync_ads(req: PeriodRequest, client: WBClient = Depends(get_wb_client)) -> dict:
+    """Реклама: статистика кампаний и списания. WB отдаёт статистику 3 раза в минуту."""
+    return _analytics_sync("реклама", lambda s: sync_ads(client, s, req.date_from, req.date_to), "Продвижение")
+
+
 class PlanRequest(BaseModel):
     month: str = Field(pattern=r"^\d{4}-\d{2}$")
     nm_id: int = 0  # 0 — весь кабинет
@@ -364,7 +371,7 @@ def reports_range(s: Session = Depends(get_session)) -> dict:
     }
 
 
-REPORTS = finance.REPORTS | orders.REPORTS | stocks.REPORTS | analytics.REPORTS
+REPORTS = finance.REPORTS | orders.REPORTS | stocks.REPORTS | analytics.REPORTS | ads.REPORTS
 
 
 def _report(name: str, s: Session, date_from: date, date_to: date, group: str | None) -> Table:
