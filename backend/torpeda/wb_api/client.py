@@ -7,7 +7,10 @@
 - товары: content-api, POST /content/v2/get/cards/list                         (Контент)
 - цены и скидки: discounts-prices-api, GET /api/v2/list/goods/filter          (Цены и скидки)
 - комиссии по предметам: common-api, GET /api/v1/tariffs/commission           (любой токен)
-- остатки FBO, заказы, продажи, финотчёт: statistics-api                       (Статистика)
+- заказы, продажи, финотчёт: statistics-api                                    (Статистика)
+- остатки на складах WB (FBO) и продавца (FBS): seller-analytics-api,
+  POST /api/analytics/v1/stocks-report/wb-warehouses и /seller-warehouses     (Аналитика)
+  (старый GET /api/v1/supplier/stocks в statistics-api WB отключил)
 - календарь акций и товары акции: dp-calendar-api                              (Цены и скидки)
 
 Ответы WB возвращаются как есть (dict/list), разбор — в torpeda.sync.
@@ -27,6 +30,7 @@ PRICES = "https://discounts-prices-api.wildberries.ru"
 COMMON = "https://common-api.wildberries.ru"
 STATISTICS = "https://statistics-api.wildberries.ru"
 CALENDAR = "https://dp-calendar-api.wildberries.ru"
+ANALYTICS = "https://seller-analytics-api.wildberries.ru"
 
 # Хост → категория токена, которую надо включить. Нужен для понятных сообщений при проверке связи.
 PING_TARGETS = {
@@ -35,6 +39,7 @@ PING_TARGETS = {
     "Статистика": STATISTICS,
     "Тарифы": COMMON,
     "Календарь акций": CALENDAR,
+    "Аналитика": ANALYTICS,
 }
 
 
@@ -135,11 +140,20 @@ class WBClient:
 
     # --- статистика ---
 
-    def get_stocks(self, date_from: date) -> list[dict]:
-        return (
-            self._request("GET", f"{STATISTICS}/api/v1/supplier/stocks", params={"dateFrom": date_from.isoformat()})
-            or []
-        )
+    def iter_stocks(self, warehouses: str, page_size: int = 250_000) -> Iterator[dict]:
+        """Текущие остатки по размерам: warehouses="wb" — склады WB (FBO), "seller" — склады продавца (FBS)."""
+        offset = 0
+        while True:
+            data = self._request(
+                "POST",
+                f"{ANALYTICS}/api/analytics/v1/stocks-report/{warehouses}-warehouses",
+                json={"limit": page_size, "offset": offset},
+            )
+            items = ((data or {}).get("data") or {}).get("items") or []
+            yield from items
+            if len(items) < page_size:
+                return
+            offset += page_size
 
     def get_orders(self, date_from: date) -> list[dict]:
         return (

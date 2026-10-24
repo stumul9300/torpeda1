@@ -1,18 +1,7 @@
-import pytest
 from fastapi.testclient import TestClient
 
 from torpeda import config
 from torpeda.api.app import app
-
-
-@pytest.fixture(autouse=True)
-def keys_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(config, "KEYS_FILE", tmp_path / "keys.json")
-    monkeypatch.delenv("WB_API_TOKEN", raising=False)
-    monkeypatch.delenv("WB_PRICES_TOKEN", raising=False)
-    return tmp_path / "keys.json"
-
 
 client = TestClient(app)
 
@@ -21,7 +10,7 @@ def test_no_keys():
     assert client.get("/api/keys").json() == {"read": None, "prices": None}
 
 
-def test_save_and_mask(keys_file):
+def test_save_and_mask():
     resp = client.put("/api/keys", json={"read": "  secret-read-1234 ", "prices": "secret-prices-9876"})
     assert resp.json() == {"read": "…1234", "prices": "…9876"}
     assert "secret-read" not in client.get("/api/keys").text  # целиком ключ не показывается
@@ -46,3 +35,24 @@ def test_env_wins(monkeypatch):
     client.put("/api/keys", json={"read": "fromfile0000"})
     monkeypatch.setenv("WB_API_TOKEN", "fromenv5555")
     assert config.get_settings().wb_api_token == "fromenv5555"
+
+
+def test_data_dir_on_windows(monkeypatch, tmp_path):
+    monkeypatch.delenv("TORPEDA_DATA_DIR", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert config.default_data_dir() == tmp_path / "Torpeda"
+    monkeypatch.setenv("TORPEDA_DATA_DIR", str(tmp_path / "my"))
+    assert config.default_data_dir() == tmp_path / "my"
+
+
+def test_migrate_old_data(data_dir):
+    config.OLD_DATA_DIR.mkdir()
+    (config.OLD_DATA_DIR / "keys.json").write_text('{"read": "old-key-7777"}', encoding="utf-8")
+    (config.OLD_DATA_DIR / "torpeda.db").write_bytes(b"db")
+    assert config.migrate_old_data() == ["keys.json", "torpeda.db"]
+    assert config.masked_keys()["read"] == "…7777"
+    assert (data_dir / "torpeda.db").read_bytes() == b"db"
+    # второй раз ничего не переписывает, даже если в старой папке что-то поменялось
+    (config.OLD_DATA_DIR / "keys.json").write_text('{"read": "newer-1111"}', encoding="utf-8")
+    assert config.migrate_old_data() == []
+    assert config.masked_keys()["read"] == "…7777"

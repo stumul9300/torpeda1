@@ -1,12 +1,14 @@
+import json
 from datetime import datetime
 from decimal import Decimal
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import create_engine, inspect, select, text
 
+from torpeda.db import init_db
 from torpeda.db.models import CommissionRate, Price, Product, PromotionItem, ReportRow, Stock
-from torpeda.sync import sync_all
+from torpeda.sync import sync_all, sync_stocks
 from torpeda.wb_api.client import WBAuthError, WBClient
 
 NOW = datetime(2026, 10, 24, 12, 0)
@@ -59,7 +61,8 @@ def test_sync_all_fills_database(wb_client, factory):
         "товары": 1,
         "цены": 1,
         "комиссии": 1,
-        "остатки": 1,
+        "остатки FBO": 1,
+        "остатки FBS": 1,
         "заказы": 1,
         "продажи": 1,
         "финотчёт": 13,
@@ -73,7 +76,8 @@ def test_sync_all_fills_database(wb_client, factory):
         assert (price.price, price.discount_pct) == (Decimal(5123), Decimal(40))
         rate = s.get(CommissionRate, 192)
         assert (rate.fbo_pct, rate.fbs_pct) == (Decimal("43.5"), Decimal(48))
-        assert s.scalars(select(Stock)).one().quantity == 45
+        stocks = {st.scheme: st.quantity for st in s.scalars(select(Stock))}
+        assert stocks == {"FBO": 45, "FBS": 7}
         assert len(s.scalars(select(ReportRow)).all()) == 13
         item = s.scalars(select(PromotionItem)).one()
         assert item.plan_discount_pct == Decimal(60)
@@ -98,4 +102,31 @@ def test_sync_continues_after_one_section_fails(factory):
     client = WBClient("t", transport=httpx.MockTransport(handler), sleep=lambda _: None)
     result = sync_all(client, factory, now=NOW)
     assert result["товары"] == 0
-    assert str(result["остатки"]).startswith("ошибка")
+    assert str(result["заказы"]).startswith("ошибка: у ключа нет доступа, включите категорию «Статистика»")
+
+
+def test_stocks_paging_and_resync(factory):
+    calls = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        calls.append((request.url.path.rsplit("/", 1)[1], body["offset"]))
+        n = 2 if body["offset"] == 0 else 1  # первая страница полная, вторая короче
+        items = [{"nmId": 1, "warehouseName": "Склад WB", "quantity": 5}] * n
+        return httpx.Response(200, json={"data": {"items": items}})
+
+    client = WBClient("t", transport=httpx.MockTransport(handler), sleep=lambda _: None)
+    assert list(client.iter_stocks("wb", page_size=2)) and calls == [("wb-warehouses", 0), ("wb-warehouses", 2)]
+    with factory() as s:
+        assert sync_stocks(client, s, NOW, "FBS") == 2  # page_size по умолчанию большой — одна страница
+        assert sync_stocks(client, s, NOW, "FBS") == 2  # повторная загрузка заменяет снимок
+        s.commit()
+        assert len(s.scalars(select(Stock).where(Stock.scheme == "FBS")).all()) == 2
+
+
+def test_old_stocks_table_is_recreated(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with engine.begin() as c:
+        c.execute(text("CREATE TABLE stocks (id INTEGER PRIMARY KEY, nm_id INTEGER, quantity INTEGER)"))
+    init_db(engine)
+    assert "scheme" in {c["name"] for c in inspect(engine).get_columns("stocks")}

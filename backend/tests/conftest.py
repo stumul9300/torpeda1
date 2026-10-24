@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
+from torpeda import config
 from torpeda.db import init_db
 from torpeda.wb_api.client import WBClient
 
@@ -71,10 +72,28 @@ class FakeWB:
                     ]
                 },
             )
-        if path == "/api/v1/supplier/stocks":
-            return httpx.Response(
-                200, json=[{"nmId": 418020031, "warehouseName": "Коледино", "quantity": 45, "inWayToClient": 3}]
-            )
+        if path == "/api/analytics/v1/stocks-report/wb-warehouses":
+            item = {
+                "nmId": 418020031,
+                "chrtId": 1,
+                "warehouseId": -999999,
+                "warehouseName": "Склад WB",
+                "regionName": "Склад WB",
+                "quantity": 45,
+                "inWayToClient": 3,
+                "inWayFromClient": 0,
+            }
+            return httpx.Response(200, json={"data": {"items": [item]}})
+        if path == "/api/analytics/v1/stocks-report/seller-warehouses":
+            item = {
+                "nmId": 418020031,
+                "chrtId": 1,
+                "warehouseId": 123,
+                "warehouseName": "Мой склад",
+                "regionName": "Центральный",
+                "quantity": 7,
+            }
+            return httpx.Response(200, json={"data": {"items": [item]}})
         if path == "/api/v1/supplier/orders":
             return httpx.Response(
                 200,
@@ -214,6 +233,17 @@ def report_rows() -> list[dict]:
         }
     )
     return rows
+
+
+@pytest.fixture(autouse=True)
+def data_dir(tmp_path, monkeypatch):
+    """Тесты не трогают настоящую папку с ключами и базой."""
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(config, "KEYS_FILE", tmp_path / "data" / "keys.json")
+    monkeypatch.setattr(config, "OLD_DATA_DIR", tmp_path / "old")
+    monkeypatch.delenv("WB_API_TOKEN", raising=False)
+    monkeypatch.delenv("WB_PRICES_TOKEN", raising=False)
+    return tmp_path / "data"
 
 
 @pytest.fixture

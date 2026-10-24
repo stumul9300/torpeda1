@@ -81,12 +81,13 @@ class CommissionRate(Base):
 
 
 class Stock(Base):
-    """Снимок остатков FBO по складам на момент последней загрузки."""
+    """Снимок остатков по складам на момент последней загрузки: FBO — склады WB, FBS — склады продавца."""
 
     __tablename__ = "stocks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    scheme: Mapped[str] = mapped_column(String(3), default="FBO")
     nm_id: Mapped[int] = mapped_column(Integer, index=True)
     warehouse: Mapped[str] = mapped_column(String(200))
     quantity: Mapped[int] = mapped_column(Integer)

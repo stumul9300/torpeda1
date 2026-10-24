@@ -12,7 +12,7 @@
 backend/            Python 3.12+, FastAPI
   torpeda/calc/     расчётный модуль: юнит-экономика, логистика, фактическая прибыль
   torpeda/api/      HTTP API для интерфейса
-  torpeda/db/       база данных SQLite (backend/data/torpeda.db)
+  torpeda/db/       база данных SQLite (%LOCALAPPDATA%\Torpeda\torpeda.db на Windows)
   torpeda/wb_api/   клиент API Wildberries
   torpeda/sync.py   загрузка данных из WB в базу
   torpeda/services.py таблица товаров и анализ акций
