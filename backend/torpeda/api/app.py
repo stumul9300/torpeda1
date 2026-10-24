@@ -29,7 +29,7 @@ from torpeda.db.models import (
     Setting,
     SyncLog,
 )
-from torpeda.reports import Table, finance, orders
+from torpeda.reports import Table, finance, orders, stocks
 from torpeda.sync import sync_all, sync_orders, sync_report, sync_sales
 from torpeda.wb_api.client import WBClient, WBError
 
@@ -315,7 +315,7 @@ def reports_range(s: Session = Depends(get_session)) -> dict:
     }
 
 
-REPORTS = finance.REPORTS | orders.REPORTS
+REPORTS = finance.REPORTS | orders.REPORTS | stocks.REPORTS
 
 
 def _report(name: str, s: Session, date_from: date, date_to: date, group: str | None) -> Table:

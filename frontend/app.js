@@ -354,7 +354,8 @@ const reportGrid = agGrid.createGrid(document.getElementById("grid-report"), {
   getRowStyle: (p) => (p.node.rowPinned ? { fontWeight: 600 } : null),
   onCellValueChanged: savePlanCell,
 });
-const ORDER_REPORTS = ["orders_sales", "buyout", "delivery_time", "spp", "abc", "plan_fact"];
+// для остатков дни продаж считаются по заказам, поэтому рядом кнопка загрузки заказов
+const ORDER_REPORTS = ["orders_sales", "buyout", "delivery_time", "spp", "abc", "plan_fact", "stocks"];
 const reportFrom = document.getElementById("report-from");
 const reportTo = document.getElementById("report-to");
 const reportParams = () => {
@@ -380,7 +381,7 @@ async function loadReport() {
   const { name, q } = reportParams();
   const isOrders = ORDER_REPORTS.includes(name);
   document.getElementById("btn-orders-sync").hidden = !isOrders;
-  document.getElementById("btn-report-sync").hidden = isOrders && name !== "abc";
+  document.getElementById("btn-report-sync").hidden = (isOrders && name !== "abc") || name === "stocks";
   setStatus("Считаю отчёт…");
   try {
     const data = await api("GET", `/api/reports/${name}?${q}`);
