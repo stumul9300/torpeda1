@@ -110,6 +110,10 @@ BASE_TOKEN_HINT = (
 )
 
 
+NO_NETWORK_HINT = "Нет связи с сервером WB: проверьте интернет или VPN и повторите загрузку."
+NETWORK_RETRY_WAITS = (2, 5, 10)
+
+
 def is_token_type_error(text: str) -> bool:
     """WB отвечает «token does not satisfy additional requirements», когда метод не принимает такой тип ключа."""
     return "additional requirements" in text.lower()
@@ -142,9 +146,22 @@ class WBClient:
     def __exit__(self, *exc) -> None:
         self.close()
 
+    def _send(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """Запрос с повтором, если не удалось соединиться. Такой запрос до WB не дошёл, повторять безопасно."""
+        for wait in NETWORK_RETRY_WAITS:
+            try:
+                return self._http.request(method, url, **kwargs)
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                self._sleep(wait)
+        try:
+            return self._http.request(method, url, **kwargs)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+            host = httpx.URL(url).host
+            raise WBError(f"{NO_NETWORK_HINT} Сервер: {host}. Подробно: {type(e).__name__}: {e}") from e
+
     def _request(self, method: str, url: str, **kwargs) -> Any:
         for attempt in range(self._max_retries + 1):
-            resp = self._http.request(method, url, **kwargs)
+            resp = self._send(method, url, **kwargs)
             if resp.status_code == 429 and attempt < self._max_retries:
                 # WB ограничивает частоту запросов; ждём, сколько он просит
                 retry = resp.headers.get("X-Ratelimit-Retry") or resp.headers.get("Retry-After") or "60"

@@ -17,7 +17,7 @@ STOCK_CHECKS = {
 def explain(status: int, body: str, rows: int | None) -> str:
     low = body.lower()
     if status == 0:
-        return "Нет связи с WB: проверьте интернет."
+        return "Нет связи с сервером WB: проверьте интернет или VPN."
     if status in (200, 204) and rows:
         return f"Всё в порядке: WB отдал {rows} строк."
     if status in (200, 204):
