@@ -2,6 +2,7 @@
 
 Маржа считается по формуле, сверенной с «Ракетой» (torpeda.calc.report, docs/formulas.md):
 к перечислению за продажи − возвраты + компенсация по программе лояльности − баллы − участие в программе
+(поля cashback_* строк детализации)
 − логистика − хранение − платная приёмка − штрафы − прочие удержания + доплаты − налог − себестоимость.
 Реклама добавится на этапе 4.
 """
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from torpeda.calc.report import ReportTotals, calculate_report
 from torpeda.db import DEFAULT_ACCOUNT_ID
-from torpeda.db.models import CostPrice, ReportRow
+from torpeda.db.models import CostPrice, ReportRow, SalesReport
 from torpeda.services import get_settings
 
 from . import Column, Table
@@ -40,21 +41,6 @@ def _oper(r: ReportRow) -> str:
 
 def _is_return(r: ReportRow) -> bool:
     return (r.doc_type_name or "").strip().lower() == "возврат"
-
-
-def _loyalty_kind(r: ReportRow) -> str | None:
-    op = _oper(r)
-    if "лояльност" not in op:
-        return None
-    if "балл" in op:
-        return "loyalty_points"
-    if "компенсац" in op:
-        return "loyalty_comp"
-    return "loyalty_fee"
-
-
-def _first_nonzero(*values: Decimal) -> Decimal:
-    return next((abs(v) for v in values if v), ZERO)
 
 
 class CostBook:
@@ -104,11 +90,7 @@ class Agg:
     def add(self, r: ReportRow, costs: CostBook) -> None:
         op = _oper(r)
         sign = -1 if _is_return(r) else 1
-        loyalty = _loyalty_kind(r)
-        if loyalty:
-            amount = _first_nonzero(r.ppvz_for_pay, r.deduction, r.additional_payment, r.retail_amount)
-            setattr(self, loyalty, getattr(self, loyalty) + amount)
-        elif op in ("продажа", "возврат"):
+        if op in ("продажа", "возврат"):
             qty = r.quantity or 0
             if sign > 0:
                 self.sales_qty += qty
@@ -124,13 +106,16 @@ class Agg:
                 self.cost += sign * cost * qty
         else:
             self.compensations += sign * r.ppvz_for_pay
-        if not loyalty:
-            self.deductions += r.deduction
-            self.additional += r.additional_payment
+        # программа лояльности — отдельные поля строки (cashback_*), а не отдельные операции
+        self.loyalty_points += r.cashback_amount or ZERO
+        self.loyalty_comp += r.cashback_discount or ZERO
+        self.loyalty_fee += r.cashback_commission_change or ZERO
+        self.deductions += r.deduction
+        self.additional += r.additional_payment
         self.deliveries += r.delivery_amount or 0
         self.return_deliveries += r.return_amount or 0
         self.logistics += r.delivery_rub
-        self.rebill += r.rebill_logistic_cost
+        self.rebill += r.rebill_logistic_cost or ZERO
         self.storage += r.storage_fee
         self.acceptance += r.acceptance
         self.penalties += r.penalty
@@ -282,10 +267,16 @@ def weeks(s: Session, date_from: date, date_to: date) -> Table:
         periods.setdefault(rid, (r.date_from, r.date_to))
         lines[rid] += 1
     tax_pct = _tax_pct(s)
+    headers = {h.report_id: h for h in s.scalars(select(SalesReport).where(SalesReport.account_id == ACC))}
     rows, total = [], Agg()
+    wb_total = ZERO
     for rid, agg in groups.items():
         total.merge(agg)
         res = agg.result(tax_pct)
+        to_pay = _to_pay(agg)
+        head = headers.get(rid)
+        if head:
+            wb_total += head.bank_payment
         rows.append(
             {
                 "report_id": str(rid),
@@ -293,7 +284,9 @@ def weeks(s: Session, date_from: date, date_to: date) -> Table:
                 "date_to": periods[rid][1],
                 "lines": lines[rid],
                 **res,
-                "to_pay": _to_pay(agg),
+                "to_pay": to_pay,
+                "wb_to_pay": head.bank_payment if head else None,
+                "diff": to_pay - head.bank_payment if head else None,
             }
         )
     rows.sort(key=lambda r: (r["date_to"] or date.min, r["report_id"]), reverse=True)
@@ -313,13 +306,17 @@ def weeks(s: Session, date_from: date, date_to: date) -> Table:
         Column("deductions", "Прочие удержания, руб"),
         Column("additional", "Доплаты, руб"),
         Column("to_pay", "Итого к оплате (расчёт), руб"),
+        Column("wb_to_pay", "Итого к оплате по шапке WB, руб"),
+        Column("diff", "Разница, руб"),
         Column("cost", "Себестоимость, руб"),
         Column("profit", "Маржа, руб"),
     ]
     totals = {"report_id": "Итого", **total.result(tax_pct), "to_pay": _to_pay(total), "lines": sum(lines.values())}
+    if headers:
+        totals |= {"wb_to_pay": wb_total, "diff": None}
     notes = [
-        "«Итого к оплате» посчитано по строкам детализации. Сравните его с суммой в шапке отчёта в личном кабинете: "
-        "шапку WB по API не отдаёт."
+        "«Итого к оплате (расчёт)» сложено из строк детализации, «по шапке WB» — сумма из самого отчёта. "
+        "Пустая шапка — у ключа нет категории «Финансы»."
     ]
     return Table("Недельные отчёты", columns, rows, totals, notes)
 
@@ -428,7 +425,7 @@ def penalties(s: Session, date_from: date, date_to: date) -> Table:
 
 
 def deductions(s: Session, date_from: date, date_to: date) -> Table:
-    rows = [r for r in _rows(s, date_from, date_to) if r.deduction and not _loyalty_kind(r)]
+    rows = [r for r in _rows(s, date_from, date_to) if r.deduction]
     notes = ["Сюда входят и списания за рекламу, если WB удерживает их из отчёта. Отдельно реклама будет на этапе 4."]
     return _list_table("Прочие удержания", rows, lambda r: r.deduction, notes)
 

@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from torpeda import config
 from torpeda.db import init_db
-from torpeda.wb_api.client import WBClient
+from torpeda.wb_api.client import FINANCE_FIELDS, WBClient
 
 
 class FakeWB:
@@ -22,6 +22,7 @@ class FakeWB:
         self.requests: list[httpx.Request] = []
         self.uploaded: list[dict] = []
         self.fail_upload = False
+        self.finance_enabled = True  # False — у ключа нет категории «Финансы», работает запасной способ
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -126,6 +127,21 @@ class FakeWB:
                     }
                 ],
             )
+        if path.startswith("/api/finance/") and not self.finance_enabled:
+            return httpx.Response(401, text="token scope not allowed")
+        if path == "/api/finance/v1/sales-reports/detailed":
+            if json.loads(request.content)["rrdId"] != 0:
+                return httpx.Response(204)
+            to_new = {old: new for new, old in FINANCE_FIELDS.items()}
+            # деньги finance-api отдаёт строками
+            money = lambda v: str(v) if isinstance(v, float) else v  # noqa: E731
+            rows = [{to_new.get(k, k): money(v) for k, v in r.items()} for r in report_rows()]
+            return httpx.Response(200, json=rows)
+        if path == "/api/finance/v1/sales-reports/list":
+            head = {"reportId": 5, "dateFrom": "2026-10-13", "dateTo": "2026-10-19", "createDate": "2026-10-20",
+                    "reportType": 1, "forPaySum": "15300", "deliveryServiceSum": "4347.82", "paidStorageSum": "1.2",
+                    "bankPaymentSum": "10950.98"}
+            return httpx.Response(200, json=[head])
         if path == "/api/v5/supplier/reportDetailByPeriod":
             if request.url.params.get("rrdid") != "0":
                 return httpx.Response(204)

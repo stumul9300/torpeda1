@@ -160,7 +160,35 @@ class ReportRow(Base):
     acquiring_fee: Mapped[Decimal] = mapped_column(Money, default=0)
     additional_payment: Mapped[Decimal] = mapped_column(Money, default=0)
     rebill_logistic_cost: Mapped[Decimal] = mapped_column(Money, default=0)  # возмещение издержек по перевозке
+    cashback_amount: Mapped[Decimal] = mapped_column(Money, default=0)  # баллы, удержанные по программе лояльности
+    cashback_discount: Mapped[Decimal] = mapped_column(Money, default=0)  # компенсация скидки по программе лояльности
+    cashback_commission_change: Mapped[Decimal] = mapped_column(Money, default=0)  # стоимость участия в программе
     raw: Mapped[str | None] = mapped_column(Text)  # строка WB целиком (JSON), для будущих отчётов
+
+
+class SalesReport(Base):
+    """Шапка еженедельного отчёта реализации из finance-api: итоги, с которыми сверяется детализация."""
+
+    __tablename__ = "sales_reports"
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    report_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    date_from: Mapped[date | None] = mapped_column(Date)
+    date_to: Mapped[date | None] = mapped_column(Date)
+    create_date: Mapped[date | None] = mapped_column(Date)
+    report_type: Mapped[int | None] = mapped_column(Integer)  # 1 — основной, 2 — по выкупам
+    retail_amount: Mapped[Decimal] = mapped_column(Money, default=0)
+    for_pay: Mapped[Decimal] = mapped_column(Money, default=0)
+    delivery: Mapped[Decimal] = mapped_column(Money, default=0)
+    storage: Mapped[Decimal] = mapped_column(Money, default=0)
+    acceptance: Mapped[Decimal] = mapped_column(Money, default=0)
+    deduction: Mapped[Decimal] = mapped_column(Money, default=0)
+    penalty: Mapped[Decimal] = mapped_column(Money, default=0)
+    additional_payment: Mapped[Decimal] = mapped_column(Money, default=0)
+    cashback_amount: Mapped[Decimal] = mapped_column(Money, default=0)
+    cashback_discount: Mapped[Decimal] = mapped_column(Money, default=0)
+    cashback_commission_change: Mapped[Decimal] = mapped_column(Money, default=0)
+    bank_payment: Mapped[Decimal] = mapped_column(Money, default=0)  # «Итого к оплате»
 
 
 class Promotion(Base):

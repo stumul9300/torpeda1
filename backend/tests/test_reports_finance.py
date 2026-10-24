@@ -1,6 +1,7 @@
 """Финансовые отчёты (этап 1) по детализации из поддельного WB."""
 
 import io
+import json
 from datetime import date
 from decimal import Decimal
 
@@ -27,8 +28,8 @@ def loaded(api, factory):
                           bonus_type_name="Занижение габаритов", **common),
                 ReportRow(rrd_id=101, nm_id=None, supplier_oper_name="Удержание", deduction=Decimal(1000),
                           bonus_type_name="Оказание услуг «ВБ.Продвижение»", **common),
-                ReportRow(rrd_id=102, nm_id=418020031, supplier_oper_name="Компенсация скидки по программе лояльности",
-                          ppvz_for_pay=Decimal(30), **common),
+                ReportRow(rrd_id=102, nm_id=418020031, supplier_oper_name="Продажа", doc_type_name="Продажа",
+                          quantity=0, cashback_discount=Decimal(30), **common),
             ]
         )  # fmt: skip
         s.commit()
@@ -77,6 +78,8 @@ def test_weeks(loaded):
     assert w["report_id"] == "5"
     # к оплате: 15300 + 30 − 4347,82 − 1,2 − 500 − 1000
     assert w["to_pay"] == pytest.approx(9480.98)
+    assert w["wb_to_pay"] == pytest.approx(10950.98)  # шапка из finance-api
+    assert w["diff"] == pytest.approx(9480.98 - 10950.98)
 
 
 def test_logistics(loaded):
@@ -109,8 +112,8 @@ def test_unknown_report(loaded):
 def test_sync_report_period(api, fake_wb):
     resp = api.post("/api/wb/sync-report", json={"date_from": "2026-01-01", "date_to": "2026-10-24"})
     assert resp.json() == {"rows": 13}
-    req = [r for r in fake_wb.requests if "reportDetailByPeriod" in r.url.path][-1]
-    assert req.url.params["dateFrom"] == "2026-01-01"
+    req = [r for r in fake_wb.requests if "sales-reports/detailed" in r.url.path][-1]
+    assert json.loads(req.content)["dateFrom"] == "2026-01-01"
     assert api.post("/api/wb/sync-report", json={"date_from": "2026-02-01", "date_to": "2026-01-01"}).status_code == 400
 
 
@@ -125,3 +128,20 @@ def test_old_db_gets_new_columns(tmp_path):
     assert {"ts_name", "bonus_type_name", "raw", "rebill_logistic_cost"} <= cols
     with engine.connect() as c:
         assert c.execute(text("SELECT nm_id FROM report_rows")).scalar() == 42
+
+
+def test_finance_api_fields_are_mapped(api, factory, fake_wb):
+    api.post("/api/wb/sync-report", json={"date_from": "2026-10-01", "date_to": "2026-10-24"})
+    assert any("/api/finance/v1/sales-reports/detailed" in r.url.path for r in fake_wb.requests)
+    assert not any("reportDetailByPeriod" in r.url.path for r in fake_wb.requests)
+    with factory() as s:
+        log = s.get(ReportRow, (1, 12))
+        assert log.delivery_rub == Decimal("4347.82") and log.supplier_oper_name == "Логистика"
+
+
+def test_falls_back_to_statistics_without_finance_scope(api, factory, fake_wb):
+    fake_wb.finance_enabled = False
+    assert api.post("/api/wb/sync-report", json={"date_from": "2026-10-01", "date_to": "2026-10-24"}).json() == {
+        "rows": 13
+    }
+    assert any("reportDetailByPeriod" in r.url.path for r in fake_wb.requests)
