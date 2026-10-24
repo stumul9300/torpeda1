@@ -361,6 +361,7 @@ const SYNC_BUTTONS = {
   stocks: ORDERS_SYNC, abc: ["btn-orders-sync", "btn-report-sync"],
   funnel: ["btn-funnel-sync"], storage: ["btn-services-sync"], acceptance: ["btn-services-sync"],
   ads: ["btn-ads-sync"], ad_costs: ["btn-ads-sync"], detail: ["btn-report-sync", "btn-ads-sync"],
+  geography: ORDERS_SYNC, joint_sales: ORDERS_SYNC, coefficients: ["btn-coef-sync"], price_history: [],
 };
 const reportFrom = document.getElementById("report-from");
 const reportTo = document.getElementById("report-to");
@@ -386,7 +387,7 @@ async function loadReport() {
   await initReportDates();
   const { name, q } = reportParams();
   const shown = SYNC_BUTTONS[name] || ["btn-report-sync"];
-  for (const id of ["btn-report-sync", "btn-orders-sync", "btn-funnel-sync", "btn-services-sync", "btn-ads-sync"]) {
+  for (const id of ["btn-report-sync", "btn-orders-sync", "btn-funnel-sync", "btn-services-sync", "btn-ads-sync", "btn-coef-sync"]) {
     document.getElementById(id).hidden = !shown.includes(id);
   }
   setStatus("Считаю отчёт…");
@@ -488,6 +489,8 @@ document.getElementById("btn-funnel-sync").addEventListener("click", (e) =>
 document.getElementById("btn-ads-sync").addEventListener("click", (e) =>
   syncPeriod(e, "/api/wb/sync-ads", "Загружаю рекламу из WB… Это может занять несколько минут",
     (r) => `Реклама: кампаний ${r.campaigns}, строк статистики ${r.stats}, списаний ${r.costs}`));
+document.getElementById("btn-coef-sync").addEventListener("click", (e) =>
+  syncPeriod(e, "/api/wb/sync-coefficients", "Загружаю коэффициенты приёмки из WB…", (r) => `Коэффициентов: ${r.rows}`));
 document.getElementById("btn-services-sync").addEventListener("click", (e) =>
   syncPeriod(e, "/api/wb/sync-services", "Загружаю хранение и приёмку из WB… Это может занять несколько минут",
     (r) => `Загружено строк: хранение ${r.storage}, приёмка ${r.acceptance}`));

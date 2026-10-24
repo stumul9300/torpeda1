@@ -25,6 +25,7 @@ class FakeWB:
         self.finance_enabled = True  # False — у ключа нет категории «Финансы», работает запасной способ
         self.analytics_enabled = True  # False — у ключа нет категории «Аналитика»
         self.advert_enabled = True  # False — у ключа нет категории «Продвижение»
+        self.tariffs_coefs = True  # False — новый адрес коэффициентов недоступен, работает запасной
         self.task_polls: dict[str, int] = {}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -183,6 +184,18 @@ class FakeWB:
                 ]
             )
             return httpx.Response(200, json={"data": {"nomenclatures": items}})
+        if path in ("/api/tariffs/v1/acceptance/coefficients", "/api/v1/acceptance/coefficients"):
+            if path.startswith("/api/tariffs") and not self.tariffs_coefs:
+                return httpx.Response(404, json={"title": "not found"})
+            row = {"warehouseName": "Коледино", "warehouseID": 507, "boxTypeName": "Короба", "boxTypeID": 2,
+                   "allowUnload": True, "storageCoef": "160", "deliveryCoef": "205", "isSortingCenter": False}
+            return httpx.Response(200, json=[
+                row | {"date": "2026-10-25T00:00:00Z", "coefficient": 0},
+                row | {"date": "2026-10-26T00:00:00Z", "coefficient": 2},
+                row | {"date": "2026-10-27T00:00:00Z", "coefficient": -1, "allowUnload": False},
+                row | {"date": "2026-10-25T00:00:00Z", "coefficient": 1, "warehouseName": "Тула", "warehouseID": 206},
+                row | {"date": "2026-10-25T00:00:00Z", "coefficient": 0, "boxTypeID": 5, "boxTypeName": "Монопаллеты"},
+            ])  # fmt: skip
         if path.startswith("/adv/"):
             if not self.advert_enabled:
                 return httpx.Response(401, json={"title": "unauthorized", "detail": "token scope not allowed"})

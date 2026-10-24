@@ -29,10 +29,11 @@ from torpeda.db.models import (
     Setting,
     SyncLog,
 )
-from torpeda.reports import Table, ads, analytics, finance, orders, stocks
+from torpeda.reports import Table, ads, analytics, finance, orders, other, stocks
 from torpeda.sync import (
     log_sync,
     sync_acceptance,
+    sync_acceptance_coefs,
     sync_ads,
     sync_all,
     sync_funnel,
@@ -343,6 +344,14 @@ def wb_sync_ads(req: PeriodRequest, client: WBClient = Depends(get_wb_client)) -
     return _analytics_sync("реклама", lambda s: sync_ads(client, s, req.date_from, req.date_to), "Продвижение")
 
 
+@app.post("/api/wb/sync-coefficients")
+def wb_sync_coefficients(client: WBClient = Depends(get_wb_client)) -> dict:
+    """Коэффициенты приёмки на ближайшие дни."""
+    return _analytics_sync(
+        "коэффициенты приёмки", lambda s: {"rows": sync_acceptance_coefs(client, s)}, "Тарифы» или «Поставки"
+    )
+
+
 class PlanRequest(BaseModel):
     month: str = Field(pattern=r"^\d{4}-\d{2}$")
     nm_id: int = 0  # 0 — весь кабинет
@@ -371,7 +380,7 @@ def reports_range(s: Session = Depends(get_session)) -> dict:
     }
 
 
-REPORTS = finance.REPORTS | orders.REPORTS | stocks.REPORTS | analytics.REPORTS | ads.REPORTS
+REPORTS = finance.REPORTS | orders.REPORTS | stocks.REPORTS | analytics.REPORTS | ads.REPORTS | other.REPORTS
 
 
 def _report(name: str, s: Session, date_from: date, date_to: date, group: str | None) -> Table:
