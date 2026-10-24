@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
 from functools import lru_cache
 
-from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from torpeda import config, costs_excel, diagnose, pricing, services
+from torpeda import __version__, config, costs_excel, diagnose, pricing, services
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, get_settings, masked_keys, save_keys
@@ -31,6 +32,7 @@ from torpeda.db.models import (
 )
 from torpeda.reports import Table, ads, analytics, finance, orders, other, stocks
 from torpeda.sync import (
+    describe,
     log_sync,
     sync_acceptance,
     sync_acceptance_coefs,
@@ -44,13 +46,34 @@ from torpeda.sync import (
 )
 from torpeda.wb_api.client import WBAuthError, WBClient, WBError
 
-app = FastAPI(title="Торпеда", version="0.2.0")
+app = FastAPI(title="Торпеда", version=__version__)
 ACC = DEFAULT_ACCOUNT_ID
 
 
+@app.middleware("http")
+async def no_cache(request: Request, call_next):
+    """Браузер не должен показывать старые страницы программы после обновления."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+_init_lock = threading.Lock()
+
+
 @lru_cache
-def session_factory() -> sessionmaker[Session]:
+def _session_factory() -> sessionmaker[Session]:
     return init_db(make_engine(get_settings().database_url))
+
+
+def session_factory() -> sessionmaker[Session]:
+    # страница при открытии шлёт несколько запросов сразу: базу создаём один раз, под замком
+    with _init_lock:
+        return _session_factory()
+
+
+session_factory.cache_clear = _session_factory.cache_clear
 
 
 def get_session() -> Iterator[Session]:
@@ -223,7 +246,7 @@ def update_settings(values: dict[str, str], s: Session = Depends(get_session)) -
 
 @app.get("/api/info")
 def info() -> dict:
-    return {"data_dir": str(config.DATA_DIR)}
+    return {"data_dir": str(config.DATA_DIR), "version": __version__}
 
 
 @app.get("/api/keys")
@@ -261,9 +284,31 @@ def sync_log(s: Session = Depends(get_session)) -> list[dict]:
     return [{"section": r.section, "at": r.at, "ok": r.ok, "message": r.message} for r in rows]
 
 
+# Ход общей загрузки: интерфейс спрашивает его, пока идёт «Загрузить из WB».
+SYNC_PROGRESS: dict = {"running": False, "step": None, "index": 0, "total": 0, "done": []}
+
+
+def _on_step(name: str, index: int, total: int, summary: str | None) -> None:
+    SYNC_PROGRESS.update(step=name, index=index, total=total)
+    if summary is not None:
+        SYNC_PROGRESS["done"].append(summary)
+
+
 @app.post("/api/wb/sync")
 def wb_sync(days: int = 30, client: WBClient = Depends(get_wb_client)) -> dict:
-    return sync_all(client, session_factory(), days=days)
+    if SYNC_PROGRESS["running"]:
+        raise HTTPException(409, "Загрузка уже идёт, дождитесь её окончания")
+    SYNC_PROGRESS.update(running=True, step=None, index=0, total=0, done=[])
+    try:
+        result = sync_all(client, session_factory(), days=days, on_step=_on_step)
+    finally:
+        SYNC_PROGRESS["running"] = False
+    return {"result": result, "summary": [describe(k, v) for k, v in result.items()]}
+
+
+@app.get("/api/wb/sync-progress")
+def wb_sync_progress() -> dict:
+    return SYNC_PROGRESS
 
 
 class PeriodRequest(BaseModel):

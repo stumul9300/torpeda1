@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -483,8 +484,32 @@ KEY_CATEGORY = {
 }
 
 
-def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, now: datetime | None = None) -> dict:
-    """Загружает всё по очереди. Ошибка одного раздела не мешает остальным."""
+SYNC_UNITS = {"товары": "карточек", "цены": "товаров", "комиссии": "предметов", "остатки FBO": "строк",
+              "остатки FBS": "строк", "заказы": "заказов", "продажи": "строк", "финотчёт": "строк"}  # fmt: skip
+
+
+def describe(name: str, result: Any) -> str:
+    """Итог раздела для человека: «остатки FBO: получено 1 234 строк» или текст ошибки."""
+    if isinstance(result, str):
+        return f"{name}: {result}"
+    if isinstance(result, tuple):  # акции: (акций, товаров в акциях)
+        return f"{name}: получено акций {result[0]}, товаров в них {result[1]}"
+    text = f"{name}: получено {result:,} {SYNC_UNITS.get(name, 'строк')}".replace(",", " ")
+    if result == 0 and name.startswith("остатки"):
+        text += " — WB ответил пустым списком (если товары на складе есть, нажмите «Проверить остатки» в «Настройках»)"
+    return text
+
+
+def sync_all(
+    client: WBClient,
+    factory: sessionmaker[Session],
+    days: int = 30,
+    now: datetime | None = None,
+    on_step: Callable[[str, int, int, str | None], None] | None = None,
+) -> dict:
+    """Загружает всё по очереди. Ошибка одного раздела не мешает остальным.
+
+    on_step(раздел, номер, всего, итог) вызывается перед разделом (итог None) и после него."""
     now = now or datetime.now()
     date_from = (now - timedelta(days=days)).date()
     steps = {
@@ -499,7 +524,9 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
         "акции": lambda s: sync_promotions(client, s, now),
     }
     result: dict[str, Any] = {}
-    for name, step in steps.items():
+    for i, (name, step) in enumerate(steps.items(), start=1):
+        if on_step:
+            on_step(name, i, len(steps), None)
         with factory() as s:
             try:
                 result[name] = step(s)
@@ -520,6 +547,8 @@ def sync_all(client: WBClient, factory: sessionmaker[Session], days: int = 30, n
                 with factory() as s2:
                     log_sync(s2, name, False, str(result[name]), now)
                     s2.commit()
+        if on_step:
+            on_step(name, i, len(steps), describe(name, result[name]))
     return result
 
 

@@ -130,3 +130,31 @@ def test_old_stocks_table_is_recreated(tmp_path):
         c.execute(text("CREATE TABLE stocks (id INTEGER PRIMARY KEY, nm_id INTEGER, quantity INTEGER)"))
     init_db(engine)
     assert "scheme" in {c["name"] for c in inspect(engine).get_columns("stocks")}
+
+
+def test_sync_summary_and_progress(api):
+    from torpeda.api import app as app_module
+
+    res = api.post("/api/wb/sync").json()
+    lines = {line.split(":")[0]: line for line in res["summary"]}
+    assert lines["остатки FBO"].startswith("остатки FBO: получено ")
+    assert "строк" in lines["остатки FBO"]
+    progress = api.get("/api/wb/sync-progress").json()
+    assert progress["running"] is False and progress["total"] == len(res["summary"])
+    assert progress["done"] == res["summary"]
+    assert app_module.SYNC_PROGRESS["index"] == progress["total"]
+
+
+def test_describe():
+    from torpeda.sync import describe
+
+    assert describe("остатки FBS", 0).endswith("нажмите «Проверить остатки» в «Настройках»)")
+    assert describe("заказы", 1234) == "заказы: получено 1 234 заказов"
+    assert describe("акции", (2, 10)) == "акции: получено акций 2, товаров в них 10"
+    assert describe("цены", "ошибка: нет доступа") == "цены: ошибка: нет доступа"
+
+
+def test_static_not_cached(api):
+    resp = api.get("/")
+    assert resp.headers.get("cache-control") == "no-cache"
+    assert api.get("/api/info").json()["version"]
