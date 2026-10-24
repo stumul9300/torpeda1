@@ -19,7 +19,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from torpeda.config import get_settings
 from torpeda.db import DEFAULT_ACCOUNT_ID, init_db, make_engine
 from torpeda.db.models import (
+    AcceptanceRow,
     CommissionRate,
+    FunnelRow,
     Order,
     Price,
     Product,
@@ -29,6 +31,7 @@ from torpeda.db.models import (
     Sale,
     SalesReport,
     Stock,
+    StorageRow,
     SyncLog,
 )
 from torpeda.wb_api.client import WBAuthError, WBClient, WBError
@@ -272,6 +275,91 @@ def sync_sales_reports(client: WBClient, s: Session, date_from: date, date_to: d
             )
         )
     return len(reports)
+
+
+def sync_funnel(client: WBClient, s: Session, date_from: date, date_to: date, now: datetime | None = None) -> int:
+    """Воронка за ровно этот период: прежние данные за тот же период заменяются."""
+    now = now or datetime.now()
+    rows = list(client.iter_funnel(date_from, date_to))
+    s.execute(
+        delete(FunnelRow).where(
+            FunnelRow.account_id == ACC, FunnelRow.date_from == date_from, FunnelRow.date_to == date_to
+        )
+    )
+    for r in rows:
+        nm = (r.get("product") or {}).get("nmId")
+        st = ((r.get("statistic") or {}).get("selected")) or {}
+        if not nm:
+            continue
+        s.add(
+            FunnelRow(
+                account_id=ACC,
+                date_from=date_from,
+                date_to=date_to,
+                nm_id=nm,
+                open_count=st.get("openCount") or 0,
+                cart_count=st.get("cartCount") or 0,
+                wishlist=st.get("addToWishlist") or 0,
+                order_count=st.get("orderCount") or 0,
+                order_sum=_dec(st.get("orderSum")) or 0,
+                buyout_count=st.get("buyoutCount") or 0,
+                buyout_sum=_dec(st.get("buyoutSum")) or 0,
+                cancel_count=st.get("cancelCount") or 0,
+                cancel_sum=_dec(st.get("cancelSum")) or 0,
+                loaded_at=now,
+            )
+        )
+    return len(rows)
+
+
+def sync_paid_storage(client: WBClient, s: Session, date_from: date, date_to: date) -> int:
+    n = 0
+    for start, end, rows in client.iter_paid_storage(date_from, date_to):
+        s.execute(
+            delete(StorageRow).where(StorageRow.account_id == ACC, StorageRow.date >= start, StorageRow.date <= end)
+        )
+        for r in rows:
+            s.add(
+                StorageRow(
+                    account_id=ACC,
+                    date=_d(r.get("date")) or start,
+                    nm_id=r.get("nmId") or 0,
+                    warehouse=r.get("warehouse"),
+                    size=r.get("size"),
+                    volume=_dec(r.get("volume")),
+                    barcodes_count=r.get("barcodesCount") or 0,
+                    price=_dec(r.get("warehousePrice")) or 0,
+                    calc_type=r.get("calcType"),
+                )
+            )
+        n += len(rows)
+        s.commit()  # каждая порция по 8 дней сохраняется сразу: загрузка за месяц идёт несколько минут
+    return n
+
+
+def sync_acceptance(client: WBClient, s: Session, date_from: date, date_to: date) -> int:
+    n = 0
+    for start, end, rows in client.iter_acceptance(date_from, date_to):
+        s.execute(
+            delete(AcceptanceRow).where(
+                AcceptanceRow.account_id == ACC, AcceptanceRow.date >= start, AcceptanceRow.date <= end
+            )
+        )
+        for r in rows:
+            s.add(
+                AcceptanceRow(
+                    account_id=ACC,
+                    date=_d(r.get("shkCreateDate")) or start,
+                    income_id=r.get("incomeId"),
+                    nm_id=r.get("nmID") or r.get("nmId") or 0,
+                    subject=r.get("subjectName"),
+                    count=r.get("count") or 0,
+                    total=_dec(r.get("total")) or 0,
+                )
+            )
+        n += len(rows)
+        s.commit()
+    return n
 
 
 def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, int]:

@@ -354,8 +354,13 @@ const reportGrid = agGrid.createGrid(document.getElementById("grid-report"), {
   getRowStyle: (p) => (p.node.rowPinned ? { fontWeight: 600 } : null),
   onCellValueChanged: savePlanCell,
 });
-// для остатков дни продаж считаются по заказам, поэтому рядом кнопка загрузки заказов
-const ORDER_REPORTS = ["orders_sales", "buyout", "delivery_time", "spp", "abc", "plan_fact", "stocks"];
+// какие кнопки загрузки показывать у отчёта; для остатков дни продаж считаются по заказам
+const ORDERS_SYNC = ["btn-orders-sync"];
+const SYNC_BUTTONS = {
+  orders_sales: ORDERS_SYNC, buyout: ORDERS_SYNC, delivery_time: ORDERS_SYNC, spp: ORDERS_SYNC, plan_fact: ORDERS_SYNC,
+  stocks: ORDERS_SYNC, abc: ["btn-orders-sync", "btn-report-sync"],
+  funnel: ["btn-funnel-sync"], storage: ["btn-services-sync"], acceptance: ["btn-services-sync"],
+};
 const reportFrom = document.getElementById("report-from");
 const reportTo = document.getElementById("report-to");
 const reportParams = () => {
@@ -379,9 +384,10 @@ async function initReportDates() {
 async function loadReport() {
   await initReportDates();
   const { name, q } = reportParams();
-  const isOrders = ORDER_REPORTS.includes(name);
-  document.getElementById("btn-orders-sync").hidden = !isOrders;
-  document.getElementById("btn-report-sync").hidden = (isOrders && name !== "abc") || name === "stocks";
+  const shown = SYNC_BUTTONS[name] || ["btn-report-sync"];
+  for (const id of ["btn-report-sync", "btn-orders-sync", "btn-funnel-sync", "btn-services-sync"]) {
+    document.getElementById(id).hidden = !shown.includes(id);
+  }
   setStatus("Считаю отчёт…");
   try {
     const data = await api("GET", `/api/reports/${name}?${q}`);
@@ -461,6 +467,26 @@ document.getElementById("btn-orders-sync").addEventListener("click", async (e) =
     e.target.disabled = false;
   }
 });
+
+async function syncPeriod(e, url, waiting, done) {
+  e.target.disabled = true;
+  setStatus(waiting);
+  try {
+    const res = await api("POST", url, { date_from: reportFrom.value, date_to: reportTo.value });
+    setStatus(done(res));
+    await loadReport();
+  } catch (err) {
+    setStatus("");
+    alert(err.message);
+  } finally {
+    e.target.disabled = false;
+  }
+}
+document.getElementById("btn-funnel-sync").addEventListener("click", (e) =>
+  syncPeriod(e, "/api/wb/sync-funnel", "Загружаю воронку из WB…", (r) => `Воронка: карточек ${r.rows}`));
+document.getElementById("btn-services-sync").addEventListener("click", (e) =>
+  syncPeriod(e, "/api/wb/sync-services", "Загружаю хранение и приёмку из WB… Это может занять несколько минут",
+    (r) => `Загружено строк: хранение ${r.storage}, приёмка ${r.acceptance}`));
 
 // --- настройки ---
 

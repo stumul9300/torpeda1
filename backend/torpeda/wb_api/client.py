@@ -13,6 +13,9 @@
   (старый GET /api/v1/supplier/stocks в statistics-api WB отключил)
 - финотчёты: finance-api, POST /api/finance/v1/sales-reports/detailed и /list     (Финансы),
   запасной способ — statistics-api reportDetailByPeriod                         (Статистика)
+- воронка продаж: seller-analytics-api, POST /api/analytics/v3/sales-funnel/products  (Аналитика)
+- платное хранение и приёмка: seller-analytics-api, отчёты-задания
+  /api/v1/paid_storage и /api/v1/acceptance_report                             (Аналитика)
 - календарь акций и товары акции: dp-calendar-api                              (Цены и скидки)
 
 Ответы WB возвращаются как есть (dict/list), разбор — в torpeda.sync.
@@ -22,7 +25,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterator
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -305,6 +308,66 @@ class WBClient:
             if not page or len(page) < 1000:
                 return out
             offset += 1000
+
+    # --- аналитика: воронка, платное хранение, приёмка ---
+
+    def iter_funnel(self, date_from: date, date_to: date, page_size: int = 1000) -> Iterator[dict]:
+        """Воронка по карточкам за период (не старше года): {"product": {...}, "statistic": {"selected": {...}}}."""
+        offset = 0
+        while True:
+            data = self._request(
+                "POST",
+                f"{ANALYTICS}/api/analytics/v3/sales-funnel/products",
+                json={
+                    "selectedPeriod": {"start": date_from.isoformat(), "end": date_to.isoformat()},
+                    "nmIds": [],
+                    "brandNames": [],
+                    "subjectIds": [],
+                    "tagIds": [],
+                    "skipDeletedNm": False,
+                    "limit": page_size,
+                    "offset": offset,
+                },
+            )
+            items = ((data or {}).get("data") or {}).get("products") or []
+            yield from items
+            if len(items) < page_size:
+                return
+            offset += page_size
+
+    def _task_report(self, kind: str, date_from: date, date_to: date, poll: float = 5, max_wait: float = 600) -> list:
+        """Отчёт-задание WB: создать, дождаться готовности, скачать."""
+        base = f"{ANALYTICS}/api/v1/{kind}"
+        created = self._request("GET", base, params={"dateFrom": date_from.isoformat(), "dateTo": date_to.isoformat()})
+        task = ((created or {}).get("data") or {}).get("taskId")
+        if not task:
+            raise WBError(f"WB не создал отчёт {kind}: {str(created)[:200]}")
+        waited = 0.0
+        while True:
+            status = (((self._request("GET", f"{base}/tasks/{task}/status") or {}).get("data")) or {}).get("status")
+            if status == "done":
+                return self._request("GET", f"{base}/tasks/{task}/download") or []
+            if status in ("purged", "canceled"):
+                raise WBError(f"WB отменил отчёт {kind} (статус {status})")
+            if waited >= max_wait:
+                raise WBError(f"WB слишком долго готовит отчёт {kind}, попробуйте позже")
+            self._sleep(poll)
+            waited += poll
+
+    def _chunked(self, kind: str, date_from: date, date_to: date, days: int) -> Iterator[tuple[date, date, list]]:
+        start = date_from
+        while start <= date_to:
+            end = min(start + timedelta(days=days - 1), date_to)
+            yield start, end, self._task_report(kind, start, end)
+            start = end + timedelta(days=1)
+
+    def iter_paid_storage(self, date_from: date, date_to: date) -> Iterator[tuple[date, date, list]]:
+        """Платное хранение по дням. WB отдаёт не больше 8 дней за раз, отчёт — раз в минуту."""
+        return self._chunked("paid_storage", date_from, date_to, 8)
+
+    def iter_acceptance(self, date_from: date, date_to: date) -> Iterator[tuple[date, date, list]]:
+        """Платная приёмка. Не больше 31 дня за раз."""
+        return self._chunked("acceptance_report", date_from, date_to, 31)
 
     # --- акции ---
 
