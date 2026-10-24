@@ -139,12 +139,17 @@
     <form id="keys-form" class="settings">
       <h2>Ключи Wildberries</h2>
       <p class="hint">Ключи хранятся только на этом компьютере. После сохранения видны лишь последние 4 символа.</p>
-      <label>Ключ для данных (только чтение) <span id="key-read-current" class="hint"></span>
-        <input name="read" type="password" autocomplete="off" placeholder="вставьте ключ">
+      <label>Ключ для данных (только чтение)
+        <textarea name="read" rows="3" autocomplete="off" spellcheck="false" data-lpignore="true" placeholder="вставьте новый ключ сюда"></textarea>
       </label>
-      <label>Ключ для изменения цен (категория «Цены и скидки») <span id="key-prices-current" class="hint"></span>
-        <input name="prices" type="password" autocomplete="off" placeholder="вставьте ключ">
+      <div id="key-read-current" class="key-now"></div>
+      <button type="button" class="key-clear" data-key="read">Очистить ключ для данных</button>
+      <label>Ключ для изменения цен (категория «Цены и скидки»)
+        <textarea name="prices" rows="3" autocomplete="off" spellcheck="false" data-lpignore="true" placeholder="вставьте новый ключ сюда"></textarea>
       </label>
+      <div id="key-prices-current" class="key-now"></div>
+      <button type="button" class="key-clear" data-key="prices">Очистить ключ для цен</button>
+      <div id="keys-result"></div>
       <button type="submit" class="primary">Сохранить ключи</button>
       <button type="button" id="btn-check">Проверить связь с WB</button>
       <pre id="check-result"></pre>

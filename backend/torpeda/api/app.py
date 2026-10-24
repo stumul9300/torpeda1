@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from torpeda import __version__, config, costs_excel, diagnose, pricing, services
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
-from torpeda.config import BACKEND_DIR, get_settings, masked_keys, save_keys
+from torpeda.config import BACKEND_DIR, clean_key, get_settings, key_source, masked_keys, save_keys
 from torpeda.db import DEFAULT_ACCOUNT_ID, init_db, make_engine
 from torpeda.db.models import (
     DEFAULT_SETTINGS,
@@ -250,9 +250,25 @@ def info() -> dict:
     return {"data_dir": str(config.DATA_DIR), "app_dir": str(config.BACKEND_DIR.parent), "version": __version__}
 
 
+KEY_TITLES = {"read": "Ключ для данных", "prices": "Ключ для изменения цен"}
+
+
+def keys_view() -> dict:
+    """Окончания ключей и что о них известно: откуда взят, тип, срок. Сам ключ не отдаётся."""
+    out: dict = masked_keys()
+    info = {}
+    for name in config.KEY_NAMES:
+        token, source = key_source(name)
+        if token:
+            t = diagnose.token_info(token)
+            info[name] = {"source": source, "ok": t["ok"], "text": t["text"], "summary": t.get("summary", [])}
+    out["info"] = info
+    return out
+
+
 @app.get("/api/keys")
-def read_keys() -> dict[str, str | None]:
-    return masked_keys()
+def read_keys() -> dict:
+    return keys_view()
 
 
 class KeysRequest(BaseModel):
@@ -261,9 +277,26 @@ class KeysRequest(BaseModel):
 
 
 @app.put("/api/keys")
-def update_keys(req: KeysRequest) -> dict[str, str | None]:
-    save_keys({k: v for k, v in req.model_dump().items() if v is not None})
-    return masked_keys()
+def update_keys(req: KeysRequest, s: Session = Depends(get_session)) -> dict:
+    values = {k: clean_key(v) for k, v in req.model_dump().items() if v is not None}
+    for name, value in values.items():
+        if value and value.count(".") != 2:
+            raise HTTPException(
+                400,
+                f"{KEY_TITLES[name]} не распознан: ключ WB — это длинная строка из трёх частей через точку. "
+                "Скопируйте его в кабинете WB заново целиком и вставьте ещё раз.",
+            )
+    save_keys(values)
+    view = keys_view()
+    for name, value in values.items():
+        if value:
+            kind = next(iter(view["info"][name]["summary"]), "тип не известен").lower()
+            message = f"сохранён, окончание {view[name]}, {kind}"
+        else:
+            message = "очищен"
+        log_sync(s, f"ключ: {KEY_TITLES[name].lower()}", True, message)
+    s.commit()
+    return view
 
 
 # --- Wildberries ---

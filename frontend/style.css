@@ -49,3 +49,11 @@ h1 small { font-size: 13px; font-weight: 400; color: #555; margin-left: 8px; }
 #sync-done { margin: 0 0 8px; padding-left: 20px; }
 #sync-done li.err { color: #c62828; }
 #sync-done li.warn { color: #b26a00; }
+
+#keys-form textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 12px; word-break: break-all; }
+.key-now { font-size: 13px; margin: 4px 0 6px; padding: 6px 8px; border-radius: 6px; background: #f3f3f3; }
+.key-now.good, #keys-result.good { background: #e8f5e9; }
+.key-now.bad, #keys-result.bad { background: #fdecea; }
+#keys-result { font-size: 13px; margin: 8px 0; padding: 0 8px; border-radius: 6px; }
+#keys-result:not(:empty) { padding: 6px 8px; }
+.key-clear { margin-bottom: 10px; }
