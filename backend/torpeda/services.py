@@ -203,6 +203,8 @@ def product_rows(s: Session) -> list[dict]:
             "cost": ctx.costs.get(p.nm_id),
             "price": price.price if price else None,
             "discount_pct": price.discount_pct if price else None,
+            "site_price": price.site_price if price else None,
+            "site_price_at": price.site_price_at if price else None,
             "spp": spp[p.nm_id][0] if p.nm_id in spp else None,
             "spp_at": spp[p.nm_id][1] if p.nm_id in spp else None,
             "calc_price": price.calc_price if price else None,
