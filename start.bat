@@ -23,6 +23,23 @@ exit /b 1
 :found
 cd /d "%ROOT%backend"
 
+set "VER="
+for /f "tokens=2 delims==" %%v in ('findstr /b "__version__" "%ROOT%backend\torpeda\__init__.py"') do set "VER=%%v"
+echo Торпеда, версия:%VER%
+echo Папка программы: %ROOT%
+echo.
+
+rem если программа уже запущена (например, старая копия в другом окне), новая не сможет открыться
+netstat -ano | findstr /r /c:":8000 .*LISTENING" >nul
+if not errorlevel 1 (
+  echo Программа уже запущена в другом окне, возможно старая версия или другая папка.
+  echo Закройте все чёрные окна «Торпеда» и запустите start.bat снова.
+  echo Если окон не видно, перезагрузите компьютер.
+  echo.
+  pause
+  exit /b 1
+)
+
 rem uv ставит Python и все библиотеки сам
 where uv >nul 2>nul
 if errorlevel 1 (
