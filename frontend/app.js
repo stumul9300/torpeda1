@@ -105,6 +105,7 @@ const productColumns = [
   { headerName: "Не хватает данных", field: "missing_text", width: 200, cellClass: "missing" },
 ];
 
+let hideNoStock = true;
 let onlyLoss = false;
 let onlyChanged = false;
 
@@ -118,12 +119,16 @@ const productsGrid = agGrid.createGrid(document.getElementById("grid-products"),
     "row-loss": (p) => p.data?.status === "loss",
     "row-risk": (p) => p.data?.status === "risk",
   },
-  isExternalFilterPresent: () => onlyLoss || onlyChanged,
+  isExternalFilterPresent: () => hideNoStock || onlyLoss || onlyChanged,
   doesExternalFilterPass: (n) =>
+    (!hideNoStock || stockTotal(n.data) > 0) &&
     (!onlyLoss || ["loss", "risk"].includes(n.data.status)) && (!onlyChanged || n.data.calc_price !== null),
   stopEditingWhenCellsLoseFocus: true,
   onCellValueChanged: saveCell,
 });
+
+// остаток FBS пока не загружается; когда появится, учтётся здесь же
+const stockTotal = (r) => (r.stock_fbo || 0) + (r.stock_fbs || 0);
 
 async function loadProducts() {
   const rows = (await api("GET", "/api/products")).map(flatten);
@@ -135,7 +140,8 @@ function updateSummary(rows) {
   const loss = rows.filter((r) => r.status === "loss").length;
   const risk = rows.filter((r) => r.status === "risk").length;
   const changed = rows.filter((r) => r.calc_price !== null).length;
-  document.getElementById("summary").textContent = `Товаров: ${rows.length} · убыточных: ${loss} · в зоне риска: ${risk} · с новой ценой: ${changed}`;
+  const noStock = rows.filter((r) => stockTotal(r) === 0).length;
+  document.getElementById("summary").textContent = `Товаров: ${rows.length} (без остатка: ${noStock}) · убыточных: ${loss} · в зоне риска: ${risk} · с новой ценой: ${changed}`;
 }
 
 async function saveCell(e) {
@@ -168,6 +174,7 @@ async function refreshRow(nm) {
 }
 
 document.getElementById("search").addEventListener("input", (e) => productsGrid.setGridOption("quickFilterText", e.target.value));
+document.getElementById("hide-no-stock").addEventListener("change", (e) => { hideNoStock = e.target.checked; productsGrid.onFilterChanged(); });
 document.getElementById("only-loss").addEventListener("change", (e) => { onlyLoss = e.target.checked; productsGrid.onFilterChanged(); });
 document.getElementById("only-changed").addEventListener("change", (e) => { onlyChanged = e.target.checked; productsGrid.onFilterChanged(); });
 
