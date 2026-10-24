@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+
+# Данные и секреты: отчёты WB, базы и токены в репозиторий не кладём
+.env
+*.db
+*.sqlite
+data/
+*.xls
+*.xlsx
+*.csv
+!backend/tests/fixtures/**
