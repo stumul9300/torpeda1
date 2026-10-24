@@ -40,3 +40,19 @@ def test_sync_log_and_unexpected_answer(api, factory):
     log = {r["section"]: r for r in api.get("/api/sync-log").json()}
     assert log["остатки FBO"]["ok"] is False
     assert log["товары"]["ok"] is True
+
+
+def test_token_info_hides_ids():
+    import base64
+    import json
+
+    from torpeda.diagnose import token_info
+
+    payload = {"exp": 4102444800, "s": (1 << 30) | 0b110, "acc": 1, "oid": 12345, "uid": 777, "t": False}
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    info = token_info(f"aaa.{body}.sig")
+    assert info["ok"] is True
+    assert info["claims"]["oid"] == "скрыто" and info["claims"]["uid"] == "скрыто"
+    assert info["claims"]["acc"] == 1 and "2100" in info["claims"]["exp"]
+    assert "биты: 1, 2, 30" in info["claims"]["s"]
+    assert token_info("not-a-jwt")["ok"] is False
