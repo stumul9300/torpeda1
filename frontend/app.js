@@ -714,6 +714,41 @@ async function syncSitePrices() {
   }
 }
 document.getElementById("btn-site-prices").addEventListener("click", syncSitePrices);
+async function loadMpstats() {
+  const result = document.getElementById("mpstats-result");
+  const table = document.getElementById("mpstats-table");
+  const skus = document.getElementById("mpstats-skus").value.trim();
+  const days = Number(document.getElementById("mpstats-days").value) || 30;
+  result.textContent = "Загружаю из MPSTATS, это может занять минуту…";
+  table.innerHTML = "";
+  try {
+    const res = await api("GET", `/api/mpstats?days=${days}&skus=${encodeURIComponent(skus)}`);
+    const n = (v) => (v === null || v === undefined ? "—" : Number(v).toLocaleString("ru-RU", { maximumFractionDigits: 0 }));
+    const head = ["Артикул", "Товар", "Продажи, шт.", "Было → стало (две половины)", "Выручка, ₽", "Цена: сейчас", "мин–макс", "У нас на сайте", "Остаток", "Дней без остатка"];
+    const body = res.rows.map((r) => [
+      r.sku,
+      r.name,
+      n(r.sales),
+      `${n(r.sales_first_half)} → ${n(r.sales_second_half)}`,
+      n(r.revenue),
+      n(r.price_last),
+      `${n(r.price_min)}–${n(r.price_max)}`,
+      n(r.our_site_price),
+      n(r.balance_last),
+      n(r.days_out_of_stock),
+    ]);
+    const tr = (cells, tag) => `<tr>${cells.map((c) => `<${tag}></${tag}>`).join("")}</tr>`;
+    table.innerHTML = tr(head, "th") + body.map((b) => tr(b, "td")).join("");
+    table.querySelectorAll("tr").forEach((row, i) => {
+      const cells = i === 0 ? head : body[i - 1];
+      row.querySelectorAll("th,td").forEach((cell, j) => (cell.textContent = cells[j]));
+    });
+    result.textContent = `Готово: артикулов ${res.rows.length}, период ${days} дн.`;
+  } catch (err) {
+    result.textContent = err.message;
+  }
+}
+document.getElementById("btn-mpstats").addEventListener("click", loadMpstats);
 const sppHourly = document.getElementById("spp-hourly");
 let sppTimer = null;
 function setSppHourly(on) {

@@ -173,6 +173,18 @@
       <pre id="bulk-cost-result"></pre>
     </div>
 
+    <div class="settings" id="mpstats-box">
+      <h2>Данные MPSTATS</h2>
+      <p class="hint">Продажи, цены и остатки по артикулам за последние дни. Токен берётся из строки MPSTATS_TOKEN в файле backend\.env.</p>
+      <label>Артикулы WB через запятую (пусто — пять артикулов по умолчанию)
+        <input id="mpstats-skus" type="text" autocomplete="off" placeholder="1803104278, 482235433, 955259665, 482235434, 1803104279">
+      </label>
+      <label>За сколько дней <input id="mpstats-days" type="number" min="1" max="365" value="30"></label>
+      <button type="button" id="btn-mpstats" class="primary">Загрузить из MPSTATS</button>
+      <pre id="mpstats-result"></pre>
+      <table id="mpstats-table" class="log"></table>
+    </div>
+
     <div class="settings">
       <h2>Себестоимость в Excel</h2>
       <p class="hint">Запасная копия себестоимости. Загрузить можно и свой файл: нужны колонки «Артикул WB» (или «Артикул продавца») и «Себестоимость».</p>
