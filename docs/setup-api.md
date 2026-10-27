@@ -56,3 +56,11 @@
 Запасной способ задать ключи — файл `backend/.env` (см. `backend/.env.example`) или переменные окружения
 `WB_API_TOKEN` и `WB_PRICES_TOKEN`; они важнее ключей из интерфейса.
 Загрузка из командной строки: `uv run python -m torpeda.sync check` и `uv run python -m torpeda.sync all`.
+
+## MPSTATS (необязательно)
+
+Для сверки цен и продаж с данными MPSTATS добавьте в `backend\.env` строку
+`MPSTATS_TOKEN=...` (токен из https://mpstats.io/userpanel, блок «API токен»; нужен тариф с доступом к API).
+Запуск: `uv run python -m torpeda.mpstats` — продажи, цены и остатки по дням за последние 30 дней
+по артикулам по умолчанию; свои артикулы и период: `uv run python -m torpeda.mpstats 482235433 --days 60`.
+Полные ответы сохраняются в папку данных Торпеды, подпапка `mpstats`. Токен в консоль не выводится.
