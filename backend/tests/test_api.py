@@ -45,3 +45,29 @@ def test_calc_unit_rejects_bad_discount():
         },
     )
     assert resp.status_code == 422
+
+
+def test_update_check(api, monkeypatch):
+    from torpeda import updater
+
+    sha = "a" * 40
+    monkeypatch.setattr(updater, "latest_commit", lambda: sha)
+    monkeypatch.setattr(updater, "installed_commit", lambda: "b" * 40)
+    assert api.get("/api/update/check").json() == {"installed": "b" * 40, "latest": sha, "available": True}
+    monkeypatch.setattr(updater, "installed_commit", lambda: sha)
+    assert api.get("/api/update/check").json()["available"] is False
+
+
+def test_update_check_without_internet(api, monkeypatch):
+    from torpeda import updater
+
+    def fail():
+        raise updater.UpdateError("нет связи")
+
+    monkeypatch.setattr(updater, "latest_commit", fail)
+    assert api.get("/api/update/check").status_code == 502
+
+
+def test_update_restart_only_on_windows(api, monkeypatch):
+    monkeypatch.setattr("os.name", "posix")
+    assert api.post("/api/update/restart").status_code == 400

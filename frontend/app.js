@@ -950,6 +950,43 @@ api("GET", "/api/info").then((i) => {
   document.getElementById("data-dir").textContent = `Ключи, себестоимость и журнал цен хранятся в папке ${i.data_dir}. Обновление программы их не стирает.`;
 });
 
+// --- обновление программы кнопкой ---
+
+const btnUpdate = document.getElementById("btn-update");
+api("GET", "/api/update/check")
+  .then((u) => {
+    if (u.available) {
+      btnUpdate.textContent = "Есть новая версия: обновить";
+      btnUpdate.classList.add("primary");
+    }
+  })
+  .catch(() => { /* без интернета кнопка остаётся обычной */ });
+
+btnUpdate.addEventListener("click", async () => {
+  btnUpdate.disabled = true;
+  try {
+    const u = await api("GET", "/api/update/check");
+    if (!u.available) {
+      setStatus("У вас последняя версия");
+      return;
+    }
+    if (!confirm("Программа перезапустится и поставит новую версию. Это займёт около минуты. Продолжить?")) return;
+    await api("POST", "/api/update/restart");
+    setStatus("Перезапускаю и обновляю…");
+    const started = Date.now();
+    const timer = setInterval(async () => {
+      try {
+        await api("GET", "/api/info");
+        if (Date.now() - started > 5000) { clearInterval(timer); location.reload(); }
+      } catch { /* программа ещё перезапускается */ }
+    }, 3000);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btnUpdate.disabled = false;
+  }
+});
+
 // --- что пошло не так ---
 
 const esc = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
