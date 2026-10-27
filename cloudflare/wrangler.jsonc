@@ -1,0 +1,17 @@
+{
+  "name": "torpeda",
+  "main": "worker.js",
+  "compatibility_date": "2025-09-01",
+  "containers": [
+    {
+      "class_name": "TorpedaContainer",
+      "image": "../Dockerfile",
+      "image_build_context": "..",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "TORPEDA", "class_name": "TorpedaContainer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TorpedaContainer"] }]
+}

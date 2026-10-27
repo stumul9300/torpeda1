@@ -1,0 +1,7 @@
+.git
+**/__pycache__
+**/.venv
+backend/data
+backend/.env
+backend/tests
+cloudflare/node_modules

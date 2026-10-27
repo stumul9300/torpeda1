@@ -10,6 +10,10 @@ from .models import DEFAULT_ACCOUNT_ID, DEFAULT_SETTINGS, Account, Base, Setting
 
 
 def make_engine(url: str) -> Engine:
+    # облачные базы выдают ссылку вида postgresql://, а драйвер у нас psycopg 3
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+psycopg://" + url.removeprefix(prefix)
     if url.startswith("sqlite:///") and url != "sqlite:///:memory:":
         Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
     return create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})

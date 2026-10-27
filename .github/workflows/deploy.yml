@@ -1,0 +1,38 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  cloudflare:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Секреты Worker'а
+        run: |
+          for name in TORPEDA_PASSWORD DATABASE_URL WB_API_TOKEN WB_PRICES_TOKEN MPSTATS_TOKEN; do
+            if [ -n "${!name}" ]; then printf '%s' "${!name}" | npx wrangler secret put "$name" 2>/dev/null || true; fi
+          done
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TORPEDA_PASSWORD: ${{ secrets.TORPEDA_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          WB_API_TOKEN: ${{ secrets.WB_API_TOKEN }}
+          WB_PRICES_TOKEN: ${{ secrets.WB_PRICES_TOKEN }}
+          MPSTATS_TOKEN: ${{ secrets.MPSTATS_TOKEN }}
+      - run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
