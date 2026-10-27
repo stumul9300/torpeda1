@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from torpeda import __version__, config, costs_excel, diagnose, mpstats, pricing, services
+from torpeda import __version__, config, costs_excel, diagnose, mpstats, pricing, services, updater
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, clean_key, get_settings, key_source, masked_keys, save_keys
@@ -313,6 +313,24 @@ def update_settings(values: dict[str, str], s: Session = Depends(get_session)) -
 @app.get("/api/info")
 def info() -> dict:
     return {"data_dir": str(config.DATA_DIR), "app_dir": str(config.BACKEND_DIR.parent), "version": __version__}
+
+
+@app.get("/api/update/check")
+def update_check() -> dict:
+    try:
+        return updater.check()
+    except updater.UpdateError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/api/update/restart")
+def update_restart() -> dict:
+    """Перезапускает программу: start.bat при старте сам скачает и поставит новую версию."""
+    try:
+        updater.restart()
+    except updater.UpdateError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True}
 
 
 KEY_TITLES = {"read": "Ключ для данных", "prices": "Ключ для изменения цен"}
