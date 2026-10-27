@@ -87,6 +87,23 @@ def test_promotion_analysis(synced):
     assert item["recommend"] == "не участвовать"
 
 
+def test_product_row_has_best_promo(synced, factory):
+    from datetime import datetime, timedelta
+
+    from torpeda.db.models import Promotion
+
+    synced.put("/api/products/418020031/cost", json={"cost": "700"})
+    with factory() as s:  # акция из тестовых данных должна идти прямо сейчас
+        for p in s.query(Promotion):
+            p.start_at, p.end_at = datetime.now() - timedelta(days=1), datetime.now() + timedelta(days=5)
+        s.commit()
+    r = row(synced)
+    assert r["promo_best"]["name"] == "11.11"
+    assert r["promo_best"]["status"] == "loss"
+    assert r["promo_best"]["price"]
+    assert r["promo_current"] in (None, "11.11")
+
+
 # --- отправка цен ---
 
 

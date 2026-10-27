@@ -62,3 +62,13 @@ h1 small { font-size: 13px; font-weight: 400; color: #555; margin-left: 8px; }
 .spp-at { font-size: 10px; color: #666; }
 .spp-at.stale { color: #b0b0b0; }
 .cell-target { background: #fff3c4 !important; font-weight: 600; }
+
+.products-layout { display: flex; gap: 12px; align-items: flex-start; }
+.products-layout .grid { flex: 1; min-width: 0; }
+#calc-panel { width: 400px; flex: none; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px; height: calc(100vh - 160px); overflow: auto; }
+#calc-panel[hidden] { display: none; }
+.calc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+#calc-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+#calc-table th, #calc-table td { padding: 3px 6px; border-bottom: 1px solid #eee; text-align: right; }
+#calc-table th:first-child { text-align: left; font-weight: 500; color: #444; }
+#columns-dialog { width: min(560px, 95vw); }

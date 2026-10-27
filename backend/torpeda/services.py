@@ -175,6 +175,44 @@ def spp_from_orders(s: Session) -> dict[int, tuple[Decimal, datetime]]:
 SPP_SOURCE = spp_from_orders
 
 
+def promo_options(s: Session, ctx: Context, products: dict[int, Product], now: datetime) -> dict[int, dict]:
+    """Для каждого артикула: акция, в которой он участвует сейчас, и самая выгодная из ещё не закончившихся.
+
+    Выгодная — с наибольшей прибылью на единицу при плановой цене акции."""
+    promos = {
+        p.id: p
+        for p in s.scalars(select(Promotion).where(Promotion.account_id == ACC))
+        if p.end_at is None or p.end_at >= now
+    }
+    out: dict[int, dict] = {}
+    for it in s.scalars(select(PromotionItem).where(PromotionItem.account_id == ACC)):
+        promo, product = promos.get(it.promotion_id), products.get(it.nm_id)
+        if promo is None or product is None:
+            continue
+        info = out.setdefault(it.nm_id, {"current": None, "best": None})
+        started = promo.start_at is None or promo.start_at <= now
+        if it.in_action and started:
+            info["current"] = promo.name
+        if it.plan_price is None:
+            continue
+        inp, _ = unit_input(ctx, product, it.plan_price, it.plan_discount_pct or ZERO)
+        res = calculate(inp)
+        best = info["best"]
+        if best is None or res.profit > best["_profit"]:
+            info["best"] = {
+                "_profit": res.profit,
+                "name": promo.name,
+                "in_action": it.in_action,
+                "price": it.plan_price,
+                "discount_pct": it.plan_discount_pct,
+                **_result_dict(ctx, res),
+            }
+    for info in out.values():
+        if info["best"]:
+            info["best"].pop("_profit")
+    return out
+
+
 def product_rows(s: Session) -> list[dict]:
     ctx = load_context(s)
     spp = SPP_SOURCE(s)
@@ -187,8 +225,10 @@ def product_rows(s: Session) -> list[dict]:
             .group_by(Stock.nm_id, Stock.scheme)
         )
     }
+    all_products = list(s.scalars(select(Product).where(Product.account_id == ACC).order_by(Product.nm_id)))
+    promos = promo_options(s, ctx, {p.nm_id: p for p in all_products}, datetime.now())
     rows = []
-    for p in s.scalars(select(Product).where(Product.account_id == ACC).order_by(Product.nm_id)):
+    for p in all_products:
         price = prices.get(p.nm_id)
         row = {
             "nm_id": p.nm_id,
@@ -211,6 +251,8 @@ def product_rows(s: Session) -> list[dict]:
             "calc_discount_pct": price.calc_discount_pct if price else None,
             "current": None,
             "calc": None,
+            "promo_current": promos.get(p.nm_id, {}).get("current"),
+            "promo_best": promos.get(p.nm_id, {}).get("best"),
             "missing": [],
         }
         if price:
