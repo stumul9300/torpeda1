@@ -11,13 +11,13 @@ from functools import lru_cache
 from urllib.parse import quote
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from torpeda import __version__, config, costs_excel, diagnose, pricing, services
+from torpeda import __version__, config, costs_excel, diagnose, mpstats, pricing, services
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, clean_key, get_settings, key_source, masked_keys, save_keys
@@ -504,6 +504,30 @@ def wb_sync_spp(client: WBClient = Depends(get_wb_client)) -> dict:
 def wb_sync_site_prices() -> dict:
     """Цены на сайте WB для покупателя в Москве (публичная карточка товара, ключ не нужен)."""
     return _analytics_sync("цены на сайте", lambda s: {"products": sync_site_prices(s)})
+
+
+@app.get("/api/mpstats")
+def mpstats_report(skus: str = "", days: int = Query(30, ge=1, le=365), s: Session = Depends(get_session)) -> dict:
+    """Продажи, цены и остатки по артикулам из MPSTATS и наша цена на сайте из последней загрузки WB."""
+    try:
+        ids = [int(x) for x in skus.replace(";", ",").replace(" ", ",").split(",") if x] or list(mpstats.DEFAULT_SKUS)
+    except ValueError:
+        raise HTTPException(422, "Артикулы нужно перечислить цифрами через запятую") from None
+    d2 = date.today() - timedelta(days=1)
+    try:
+        rows = mpstats.fetch(ids, d2 - timedelta(days=days - 1), d2)
+    except mpstats.MpstatsError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Нет связи с MPSTATS: {exc}") from exc
+    ours = {
+        r.nm_id: r.site_price
+        for r in s.scalars(select(Price).where(Price.account_id == ACC, Price.nm_id.in_(ids)))
+        if r.site_price is not None
+    }
+    for row in rows:
+        row["our_site_price"] = float(ours[row["sku"]]) if row["sku"] in ours else None
+    return {"days": days, "rows": rows}
 
 
 @app.post("/api/wb/sync-coefficients")

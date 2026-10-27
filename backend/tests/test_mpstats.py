@@ -35,3 +35,20 @@ def test_fetch_sends_token_header(monkeypatch, tmp_path):
     assert all(r.headers["X-Mpstats-TOKEN"] == "secret" for r in seen)
     assert seen[1].url.path == "/api/analytics/v1/wb/items/42/by_period"
     assert (tmp_path / "42_2026-10-01_2026-10-30.json").exists()
+
+
+def test_api_mpstats_report(api, monkeypatch):
+    from torpeda.api import app as app_module
+
+    seen = {}
+
+    def fake_fetch(skus, d1, d2):
+        seen["args"] = (skus, d1, d2)
+        return [{"sku": skus[0], "name": "Товар", "sales": 3}]
+
+    monkeypatch.setattr(app_module.mpstats, "fetch", fake_fetch)
+    res = api.get("/api/mpstats?skus=482235433&days=7")
+    assert res.status_code == 200
+    assert res.json()["rows"][0]["sku"] == 482235433
+    assert (seen["args"][2] - seen["args"][1]).days == 6
+    assert api.get("/api/mpstats?skus=abc").status_code == 422
