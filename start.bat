@@ -40,6 +40,14 @@ if not errorlevel 1 (
   exit /b 1
 )
 
+rem автообновление: если на GitHub есть новая версия, файлы заменяются и start.bat запускается заново
+if exist "%ROOT%autoupdate.ps1" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%autoupdate.ps1"
+  if errorlevel 2 (
+    start "" "%ROOT%start.bat" & exit
+  )
+)
+
 rem uv ставит Python и все библиотеки сам
 where uv >nul 2>nul
 if errorlevel 1 (

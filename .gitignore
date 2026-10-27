@@ -18,3 +18,4 @@ data/
 *.xlsx
 *.csv
 !backend/tests/fixtures/**
+.installed-commit
