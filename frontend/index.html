@@ -40,11 +40,20 @@
       <button id="btn-spp" type="button">Обновить СПП</button>
       <button id="btn-site-prices" type="button">Обновить цены на сайте</button>
       <label title="Пока программа открыта"><input type="checkbox" id="spp-hourly"> СПП и цены на сайте каждый час</label>
+      <button id="btn-columns" type="button">Колонки…</button>
       <button id="btn-bulk-cost" type="button">Себестоимость всем…</button>
       <button id="btn-preview" class="primary">Отправить новые цены в WB…</button>
     </div>
     <p class="hint">Двойной щелчок по ячейкам «Себест.», «Новая цена до скидки», «Новая скидка» — ввод. Enter — сохранить, маржа пересчитается сразу.</p>
-    <div id="grid-products" class="ag-theme-quartz grid"></div>
+    <div class="products-layout">
+      <div id="grid-products" class="ag-theme-quartz grid"></div>
+      <aside id="calc-panel" hidden>
+        <div class="calc-head"><b id="calc-title"></b><button type="button" id="calc-close">×</button></div>
+        <table id="calc-table"></table>
+        <p id="calc-missing" class="missing"></p>
+        <p class="hint">Нажмите на строку таблицы, чтобы увидеть расчёт по товару. Цены и скидки меняются в таблице.</p>
+      </aside>
+    </div>
   </section>
 
   <section id="tab-reports" class="panel">
@@ -218,6 +227,15 @@
       <button type="submit" class="primary">Сохранить</button>
     </form>
   </section>
+
+  <dialog id="columns-dialog">
+    <h3>Колонки таблицы товаров</h3>
+    <table class="log"><thead><tr><th>Блок колонок</th><th>Выводить</th><th>Закрепить слева</th></tr></thead><tbody id="columns-body"></tbody></table>
+    <div class="dialog-actions">
+      <button type="button" id="columns-reset">Сбросить</button>
+      <button type="button" id="columns-close" class="primary">Закрыть</button>
+    </div>
+  </dialog>
 
   <dialog id="preview-dialog">
     <h2>Предпросмотр отправки цен в WB</h2>

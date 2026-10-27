@@ -72,6 +72,11 @@ const flatten = (r) => ({
   calc_profit: num(r.calc?.profit),
   calc_margin: num(r.calc?.margin_pct),
   calc_roi: num(r.calc?.roi_pct),
+  promo_best_name: r.promo_best?.name ?? null,
+  promo_best_price: num(r.promo_best?.price),
+  promo_best_profit: num(r.promo_best?.profit),
+  promo_best_margin: num(r.promo_best?.margin_pct),
+  promo_best_roi: num(r.promo_best?.roi_pct),
   status: r.calc?.status || r.current?.status || null,
   missing_text: (r.missing || []).join(", "),
 });
@@ -175,8 +180,52 @@ const productColumns = [
       { headerName: "ROI", field: "calc_roi", width: 90, valueFormatter: pct, type: "numericColumn" },
     ],
   },
+  {
+    headerName: "Акции",
+    children: [
+      { headerName: "Текущая акция", field: "promo_current", width: 160 },
+      {
+        headerName: "Выгодная акция",
+        field: "promo_best_name",
+        width: 170,
+        valueFormatter: (p) => (p.value == null ? "" : p.value + (p.data.promo_best?.in_action ? " (участвует)" : "")),
+        headerTooltip: "Акция с наибольшей прибылью на единицу при плановой цене акции",
+      },
+      { headerName: "Цена до скидки в акции", field: "promo_best_price", width: 120, valueFormatter: rub, type: "numericColumn" },
+      { headerName: "Маржа в акции, ₽", field: "promo_best_profit", width: 110, valueFormatter: rub, cellClass: signClass, type: "numericColumn" },
+      { headerName: "Маржа в акции, %", field: "promo_best_margin", width: 100, valueFormatter: pct, cellClass: signClass, type: "numericColumn" },
+      { headerName: "ROI в акции", field: "promo_best_roi", width: 90, valueFormatter: pct, type: "numericColumn" },
+    ],
+  },
   { headerName: "Не хватает данных", field: "missing_text", width: 200, cellClass: "missing" },
 ];
+
+// Блоки колонок для окна «Колонки»: что выводить и что закреплять слева. Выбор помнится в браузере.
+const COLUMN_BLOCKS = [
+  { id: "photo", label: "Фото", cols: ["photo"], show: true, pin: true },
+  { id: "nm", label: "Артикул WB", cols: ["nm_id"], show: true, pin: true },
+  { id: "vendor", label: "Артикул продавца", cols: ["vendor_code"], show: true, pin: true },
+  { id: "names", label: "Название / Бренд / Предмет", cols: ["title", "brand", "subject"], show: true, pin: false },
+  { id: "stocks", label: "Остатки FBO / FBS", cols: ["stock_fbo", "stock_fbs"], show: true, pin: false },
+  { id: "sold", label: "Продано за период", cols: ["sold_net_qty"], show: true, pin: false },
+  { id: "cost", label: "Себестоимость", cols: ["cost"], show: true, pin: false },
+  { id: "now", label: "Цены и маржа сейчас в WB", cols: ["price", "discount_pct", "cur_seller_price", "spp", "site_price", "buyer_price", "cur_commission", "cur_logistics", "cur_tax", "cur_profit", "cur_margin", "cur_roi"], show: true, pin: false },
+  { id: "new", label: "Новая цена (расчёт)", cols: ["target_site_price", "calc_price", "calc_discount_pct", "calc_seller_price", "calc_profit", "calc_margin", "calc_roi"], show: true, pin: false },
+  { id: "promo", label: "Акции: текущая и выгодная", cols: ["promo_current", "promo_best_name", "promo_best_price", "promo_best_profit", "promo_best_margin", "promo_best_roi"], show: true, pin: false },
+  { id: "missing", label: "Не хватает данных", cols: ["missing_text"], show: true, pin: false },
+];
+const COLS_KEY = "torpeda.columns";
+
+function loadColumnPrefs() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(COLS_KEY) || "{}"); } catch { /* без сохранённого вида */ }
+  return Object.fromEntries(COLUMN_BLOCKS.map((b) => [b.id, { show: saved[b.id]?.show ?? b.show, pin: saved[b.id]?.pin ?? b.pin }]));
+}
+
+function applyColumnPrefs(prefs) {
+  const state = COLUMN_BLOCKS.flatMap((b) => b.cols.map((c) => ({ colId: c, hide: !prefs[b.id].show, pinned: prefs[b.id].pin ? "left" : null })));
+  productsGrid.applyColumnState({ state });
+}
 
 let hideNoStock = true;
 let onlyLoss = false;
@@ -200,6 +249,8 @@ const productsGrid = agGrid.createGrid(document.getElementById("grid-products"),
   stopEditingWhenCellsLoseFocus: true,
   onCellValueChanged: saveCell,
 });
+
+applyColumnPrefs(loadColumnPrefs());
 
 const stockTotal = (r) => (r.stock_fbo || 0) + (r.stock_fbs || 0);
 
@@ -260,6 +311,75 @@ document.getElementById("search").addEventListener("input", (e) => productsGrid.
 document.getElementById("hide-no-stock").addEventListener("change", (e) => { hideNoStock = e.target.checked; productsGrid.onFilterChanged(); });
 document.getElementById("only-loss").addEventListener("change", (e) => { onlyLoss = e.target.checked; productsGrid.onFilterChanged(); });
 document.getElementById("only-changed").addEventListener("change", (e) => { onlyChanged = e.target.checked; productsGrid.onFilterChanged(); });
+
+// --- окно «Колонки» ---
+
+const colsDialog = document.getElementById("columns-dialog");
+function openColumns() {
+  const prefs = loadColumnPrefs();
+  document.getElementById("columns-body").innerHTML = COLUMN_BLOCKS.map(
+    (b) => `<tr><td>${esc(b.label)}</td>
+      <td><input type="checkbox" data-id="${b.id}" data-k="show" ${prefs[b.id].show ? "checked" : ""}></td>
+      <td><input type="checkbox" data-id="${b.id}" data-k="pin" ${prefs[b.id].pin ? "checked" : ""}></td></tr>`
+  ).join("");
+  colsDialog.showModal();
+}
+document.getElementById("btn-columns").addEventListener("click", openColumns);
+document.getElementById("columns-body").addEventListener("change", (e) => {
+  const prefs = loadColumnPrefs();
+  prefs[e.target.dataset.id][e.target.dataset.k] = e.target.checked;
+  try { localStorage.setItem(COLS_KEY, JSON.stringify(prefs)); } catch { /* вид не сохранится, но применится */ }
+  applyColumnPrefs(prefs);
+});
+document.getElementById("columns-reset").addEventListener("click", () => {
+  try { localStorage.removeItem(COLS_KEY); } catch { /* нечего сбрасывать */ }
+  applyColumnPrefs(loadColumnPrefs());
+  openColumns();
+});
+document.getElementById("columns-close").addEventListener("click", () => colsDialog.close());
+
+// --- калькулятор справа: выбранный товар в трёх вариантах цены ---
+
+const CALC_ROWS = [
+  ["Цена до скидки", (r, x) => x.price],
+  ["Скидка, %", (r, x) => x.discount],
+  ["Цена продавца", (r, x) => x.res?.seller_price],
+  ["СПП, %", (r) => r.spp],
+  ["Цена с СПП", (r, x) => (x.res?.seller_price != null && r.spp != null ? num(x.res.seller_price) * (1 - num(r.spp) / 100) : null)],
+  ["Комиссия", (r, x) => x.res?.commission],
+  ["Логистика", (r, x) => x.res?.logistics],
+  ["Эквайринг", (r, x) => x.res?.acquiring],
+  ["Хранение", (r, x) => x.res?.storage],
+  ["Налог", (r, x) => x.res?.tax],
+  ["Себестоимость", (r, x) => x.res?.cost],
+  ["Маржа, ₽", (r, x) => x.res?.profit, true],
+  ["ROI, %", (r, x) => x.res?.roi_pct, true],
+  ["Маржинальность, %", (r, x) => x.res?.margin_pct, true],
+];
+const fmt = (v) => (v == null ? "—" : Number(v).toLocaleString("ru-RU", { maximumFractionDigits: 2 }));
+
+function showCalculator(r) {
+  const variants = [
+    { title: "Текущая", price: r.price, discount: r.discount_pct, res: r.current },
+    { title: "Новая", price: r.calc_price, discount: r.calc_discount_pct ?? (r.calc_price != null ? r.discount_pct : null), res: r.calc },
+    { title: r.promo_best ? `Акция «${r.promo_best.name}»` : "Акция", price: r.promo_best?.price, discount: r.promo_best?.discount_pct, res: r.promo_best },
+  ];
+  const head = `<tr><th></th>${variants.map((v) => `<th>${esc(v.title)}</th>`).join("")}</tr>`;
+  const body = CALC_ROWS.map(([label, get, signed]) => {
+    const cells = variants.map((v) => {
+      const val = get(r, v);
+      const cls = signed && val != null ? (num(val) < 0 ? "neg" : "pos") : "";
+      return `<td class="${cls}">${fmt(val)}</td>`;
+    });
+    return `<tr><th>${label}</th>${cells.join("")}</tr>`;
+  }).join("");
+  document.getElementById("calc-title").textContent = `${r.vendor_code || ""} · ${r.nm_id}`;
+  document.getElementById("calc-table").innerHTML = head + body;
+  document.getElementById("calc-missing").textContent = r.missing_text ? `Не хватает: ${r.missing_text}` : "";
+  document.getElementById("calc-panel").hidden = false;
+}
+productsGrid.addEventListener("rowClicked", (e) => showCalculator(e.data));
+document.getElementById("calc-close").addEventListener("click", () => { document.getElementById("calc-panel").hidden = true; });
 
 // --- загрузка из WB ---
 
