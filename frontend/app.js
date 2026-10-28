@@ -990,8 +990,33 @@ api("GET", "/api/update/check")
   })
   .catch(() => { /* без интернета кнопка остаётся обычной */ });
 
+const isNetworkError = (err) => err instanceof TypeError;
+
+// После перезапуска ждём, пока программа снова ответит, и перезагружаем страницу
+function waitForRestart() {
+  const started = Date.now();
+  let gone = false;
+  setStatus("Перезапускаю и обновляю, это около минуты…");
+  btnUpdate.disabled = true;
+  const timer = setInterval(async () => {
+    try {
+      await api("GET", "/api/info");
+      if (gone || Date.now() - started > 15000) { clearInterval(timer); location.reload(); }
+    } catch {
+      gone = true; // программа остановилась и ещё не поднялась
+    }
+    if (Date.now() - started > 180000) {
+      clearInterval(timer);
+      btnUpdate.disabled = false;
+      setStatus("");
+      alert("Программа не запустилась за 3 минуты. Откройте чёрное окно «Торпеда» или запустите start.bat вручную.");
+    }
+  }, 3000);
+}
+
 btnUpdate.addEventListener("click", async () => {
   btnUpdate.disabled = true;
+  let restarting = false;
   try {
     const u = await api("GET", "/api/update/check");
     if (!u.available) {
@@ -999,20 +1024,22 @@ btnUpdate.addEventListener("click", async () => {
       return;
     }
     if (!confirm("Программа перезапустится и поставит новую версию. Это займёт около минуты. Продолжить?")) return;
+    restarting = true;
     await api("POST", "/api/update/restart");
-    setStatus("Перезапускаю и обновляю…");
-    const started = Date.now();
-    const timer = setInterval(async () => {
-      try {
-        await api("GET", "/api/info");
-        if (Date.now() - started > 5000) { clearInterval(timer); location.reload(); }
-      } catch { /* программа ещё перезапускается */ }
-    }, 3000);
   } catch (err) {
-    alert(err.message);
+    if (restarting && isNetworkError(err)) {
+      // программа закрылась раньше, чем успела ответить: так и задумано, ждём запуска
+    } else if (isNetworkError(err)) {
+      alert("Нет связи с программой. Если чёрное окно «Торпеда» закрыто, запустите start.bat.");
+      return;
+    } else {
+      alert(err.message);
+      return;
+    }
   } finally {
-    btnUpdate.disabled = false;
+    if (!restarting) btnUpdate.disabled = false;
   }
+  if (restarting) waitForRestart();
 });
 
 // --- что пошло не так ---
