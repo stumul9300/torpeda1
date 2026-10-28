@@ -52,3 +52,27 @@ def test_api_mpstats_report(api, monkeypatch):
     assert res.json()["rows"][0]["sku"] == 482235433
     assert (seen["args"][2] - seen["args"][1]).days == 6
     assert api.get("/api/mpstats?skus=abc").status_code == 422
+
+
+def test_token_from_env_file_with_bom_and_quotes(monkeypatch, tmp_path):
+    (tmp_path / ".env").write_bytes('﻿MPSTATS_TOKEN="abc.def "\n'.encode())
+    monkeypatch.setattr(mpstats, "BACKEND_DIR", tmp_path)
+    monkeypatch.delenv("MPSTATS_TOKEN", raising=False)
+    value, source = mpstats.token_source()
+    assert value == "abc.def"
+    assert str(tmp_path / ".env") in source
+    assert "длина 7" in mpstats.describe(value, source)
+    assert "abc" not in mpstats.describe(value, source)
+
+
+def test_401_message_names_source_not_token(monkeypatch, tmp_path):
+    import pytest
+
+    monkeypatch.setattr(mpstats, "BACKEND_DIR", tmp_path)
+    monkeypatch.setenv("MPSTATS_TOKEN", "secret.token1234")
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(401, text="bad")))
+    with pytest.raises(mpstats.MpstatsError) as exc:
+        mpstats.get(client, "items/1/full")
+    assert "переменная окружения" in str(exc.value)
+    assert "длина 16" in str(exc.value)
+    assert "secret" not in str(exc.value)

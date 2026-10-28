@@ -24,8 +24,9 @@ from datetime import date, timedelta
 from typing import Any
 
 import httpx
+from dotenv import dotenv_values
 
-from torpeda.config import DATA_DIR, clean_key
+from torpeda.config import BACKEND_DIR, DATA_DIR, clean_key
 
 BASE = "https://mpstats.io/api/analytics/v1/wb"
 DEFAULT_SKUS = (1803104278, 482235433, 955259665, 482235434, 1803104279)
@@ -44,10 +45,39 @@ class MpstatsError(RuntimeError):
     pass
 
 
+def token_source() -> tuple[str, str]:
+    """Токен и откуда он взят: переменная окружения важнее файла, как и для ключей WB."""
+    env_file = BACKEND_DIR / ".env"
+    from_file = clean_token(dotenv_values(env_file, encoding="utf-8-sig").get("MPSTATS_TOKEN") or "")
+    from_env = clean_token(os.getenv("MPSTATS_TOKEN", ""))
+    if from_env and from_env != from_file:
+        return from_env, "переменная окружения MPSTATS_TOKEN"
+    if from_file:
+        return from_file, f"файл {env_file}"
+    return "", ""
+
+
+def clean_token(value: str) -> str:
+    """Токен без пробелов, кавычек и приставок, которые попадают при копировании."""
+    value = clean_key(value).strip("\"'")
+    for prefix in ("MPSTATS_TOKEN=", "X-Mpstats-TOKEN:", "Bearer"):
+        if value.lower().startswith(prefix.lower()):
+            value = value[len(prefix) :]
+    return value.strip("\"'")
+
+
+def describe(value: str, source: str) -> str:
+    """Для сообщений об ошибке: откуда взят токен и его размер, сам токен не показывается."""
+    return f"токен взят из: {source}; длина {len(value)} симв., точек {value.count('.')}, окончание …{value[-4:]}"
+
+
 def token() -> str:
-    if value := clean_key(os.getenv("MPSTATS_TOKEN", "")):
+    if value := token_source()[0]:
         return value
-    raise MpstatsError("Нет токена MPSTATS: добавьте строку MPSTATS_TOKEN=... в файл backend\\.env")
+    raise MpstatsError(
+        f"Нет токена MPSTATS: добавьте строку MPSTATS_TOKEN=... в файл {BACKEND_DIR / '.env'} "
+        "(это папка той копии Торпеды, которая сейчас запущена)"
+    )
 
 
 def get(client: httpx.Client, path: str, params: dict[str, Any] | None = None) -> Any:
@@ -60,7 +90,12 @@ def get(client: httpx.Client, path: str, params: dict[str, Any] | None = None) -
             time.sleep(min(int(resp.headers.get("Retry-After") or 5), 60))
             continue
         if resp.status_code == 401:
-            raise MpstatsError("MPSTATS не принял токен (401): проверьте MPSTATS_TOKEN или тариф с доступом к API")
+            value, source = token_source()
+            raise MpstatsError(
+                "MPSTATS не принял токен (401). Проверьте, что токен скопирован целиком из mpstats.io/userpanel "
+                "(блок «API токен»; он меняется после смены пароля) и что тариф включает доступ к API. "
+                f"Сейчас {describe(value, source)}. Ответ MPSTATS: {resp.text[:200]}"
+            )
         raise MpstatsError(f"MPSTATS ответил {resp.status_code} на {path}: {resp.text[:300]}")
     raise MpstatsError(f"MPSTATS не отдал данные по {path} после нескольких попыток")
 
@@ -151,10 +186,14 @@ def print_report(rows: list[dict[str, Any]]) -> None:
     for r in rows:
         print(f"\nАртикул {r['sku']}  {r['name']}")
         print(f"  Период: {r['period']} ({r['days']} дн.)")
-        print(f"  Продажи: {r['sales']} шт. (первая половина {r['sales_first_half']}, "
-              f"вторая {r['sales_second_half']}), выручка ≈ {fmt(float(r['revenue']))} ₽")
-        print(f"  Цена покупателя: было {fmt(r['price_first'])}, сейчас {fmt(r['price_last'])}, "
-              f"мин {fmt(r['price_min'])}, макс {fmt(r['price_max'])}, средняя {fmt(r['price_avg'])} ₽")
+        print(
+            f"  Продажи: {r['sales']} шт. (первая половина {r['sales_first_half']}, "
+            f"вторая {r['sales_second_half']}), выручка ≈ {fmt(float(r['revenue']))} ₽"
+        )
+        print(
+            f"  Цена покупателя: было {fmt(r['price_first'])}, сейчас {fmt(r['price_last'])}, "
+            f"мин {fmt(r['price_min'])}, макс {fmt(r['price_max'])}, средняя {fmt(r['price_avg'])} ₽"
+        )
         print(f"  Цена до скидки сейчас: {fmt(r['base_price_last'])} ₽")
         print(f"  Остаток сейчас: {fmt(r['balance_last'])} шт., дней без остатка: {r['days_out_of_stock']}")
         if not r["days"]:
