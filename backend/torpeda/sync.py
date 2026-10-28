@@ -524,9 +524,13 @@ def sync_ads(client: WBClient, s: Session, date_from: date, date_to: date) -> di
     return {"campaigns": len(ids), "stats": len(stats), "costs": len(costs)}
 
 
-def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, int]:
+def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, int, int]:
+    """Акции и их товары. Возвращает (акций, товаров в них, акций без списка товаров).
+
+    Автоакции WB отдаёт без списка товаров: метод товаров на них отвечает 422, поэтому для них
+    сохраняется только сама акция. 422 на обычной акции (например, уже закончилась) тоже не рушит загрузку."""
     promos = client.get_promotions(now - timedelta(days=7), now + timedelta(days=60))
-    items = 0
+    items = skipped = 0
     for p in promos:
         s.merge(
             Promotion(
@@ -538,7 +542,17 @@ def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, i
                 end_at=_dt(p.get("endDateTime")),
             )
         )
-        for it in client.iter_promotion_items(p["id"]):
+        if p.get("type") == "auto":
+            skipped += 1
+            continue
+        try:
+            promo_items = list(client.iter_promotion_items(p["id"]))
+        except WBError as e:
+            if e.status != 422:
+                raise
+            skipped += 1
+            continue
+        for it in promo_items:
             s.merge(
                 PromotionItem(
                     account_id=ACC,
@@ -552,7 +566,7 @@ def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, i
                 )
             )
             items += 1
-    return len(promos), items
+    return len(promos), items, skipped
 
 
 # какую категорию включить у ключа, если WB отказал в доступе
@@ -576,8 +590,11 @@ def describe(name: str, result: Any) -> str:
     """Итог раздела для человека: «остатки FBO: получено 1 234 строк» или текст ошибки."""
     if isinstance(result, str):
         return f"{name}: {result}"
-    if isinstance(result, tuple):  # акции: (акций, товаров в акциях)
-        return f"{name}: получено акций {result[0]}, товаров в них {result[1]}"
+    if isinstance(result, tuple):  # акции: (акций, товаров в акциях, акций без списка товаров)
+        text = f"{name}: получено акций {result[0]}, товаров в них {result[1]}"
+        if result[2]:
+            text += f" (у {result[2]} акций WB не отдаёт список товаров, это в основном автоакции)"
+        return text
     text = f"{name}: получено {result:,} {SYNC_UNITS.get(name, 'строк')}".replace(",", " ")
     if result == 0 and name.startswith("остатки"):
         text += " — WB ответил пустым списком (если товары на складе есть, нажмите «Проверить остатки» в «Настройках»)"

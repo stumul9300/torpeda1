@@ -102,7 +102,9 @@ PING_TARGETS = {
 
 
 class WBError(Exception):
-    pass
+    def __init__(self, message: str = "", status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 BASE_TOKEN_HINT = (
@@ -172,7 +174,7 @@ class WBClient:
             if resp.status_code in (401, 403):
                 raise WBAuthError(f"WB отказал в доступе ({resp.status_code}) к {url}: {resp.text[:200]}")
             if resp.status_code >= 400:
-                raise WBError(f"WB вернул {resp.status_code} на {url}: {resp.text[:200]}")
+                raise WBError(f"WB вернул {resp.status_code} на {url}: {resp.text[:200]}", status=resp.status_code)
             if resp.status_code == 204 or not resp.content:
                 return None
             return resp.json()
