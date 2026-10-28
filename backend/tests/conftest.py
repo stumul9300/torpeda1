@@ -174,15 +174,31 @@ class FakeWB:
                             {
                                 "id": 1001,
                                 "name": "11.11",
+                                "type": "regular",
+                                "startDateTime": "2026-10-29T00:00:00Z",
+                                "endDateTime": "2026-11-05T23:59:59Z",
+                            },
+                            {  # автоакция: список товаров WB не отдаёт
+                                "id": 1002,
+                                "name": "Автоакция",
                                 "type": "auto",
                                 "startDateTime": "2026-10-29T00:00:00Z",
                                 "endDateTime": "2026-11-05T23:59:59Z",
-                            }
+                            },
+                            {  # обычная акция, на которую WB почему-то отвечает 422
+                                "id": 1003,
+                                "name": "Закрытая",
+                                "type": "regular",
+                                "startDateTime": "2026-10-29T00:00:00Z",
+                                "endDateTime": "2026-11-05T23:59:59Z",
+                            },
                         ]
                     }
                 },
             )
         if path == "/api/v1/calendar/promotions/nomenclatures":
+            if request.url.params.get("promotionID") != "1001":
+                return httpx.Response(422, json={"errorText": "Unprocessable entity"})
             in_action = request.url.params.get("inAction") == "true"
             items = (
                 []
