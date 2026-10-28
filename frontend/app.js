@@ -74,6 +74,7 @@ const flatten = (r) => ({
   calc_roi: num(r.calc?.roi_pct),
   promo_best_name: r.promo_best?.name ?? null,
   promo_best_price: num(r.promo_best?.price),
+  promo_best_discount: num(r.promo_best?.discount_pct),
   promo_best_profit: num(r.promo_best?.profit),
   promo_best_margin: num(r.promo_best?.margin_pct),
   promo_best_roi: num(r.promo_best?.roi_pct),
@@ -189,9 +190,10 @@ const productColumns = [
         field: "promo_best_name",
         width: 170,
         valueFormatter: (p) => (p.value == null ? "" : p.value + (p.data.promo_best?.in_action ? " (участвует)" : "")),
-        headerTooltip: "Акция с наибольшей прибылью на единицу при плановой цене акции",
+        headerTooltip: "Акция с самой высокой ценой продавца после скидки среди акций без убытка",
       },
-      { headerName: "Цена до скидки в акции", field: "promo_best_price", width: 120, valueFormatter: rub, type: "numericColumn" },
+      { headerName: "Цена до скидки для вступления", field: "promo_best_price", width: 130, valueFormatter: rub, type: "numericColumn", headerTooltip: "Цена до скидки, которую нужно поставить, чтобы вступить в выгодную акцию" },
+      { headerName: "Скидка для вступления", field: "promo_best_discount", width: 100, valueFormatter: pct, type: "numericColumn" },
       { headerName: "Маржа в акции, ₽", field: "promo_best_profit", width: 110, valueFormatter: rub, cellClass: signClass, type: "numericColumn" },
       { headerName: "Маржа в акции, %", field: "promo_best_margin", width: 100, valueFormatter: pct, cellClass: signClass, type: "numericColumn" },
       { headerName: "ROI в акции", field: "promo_best_roi", width: 90, valueFormatter: pct, type: "numericColumn" },
@@ -211,7 +213,7 @@ const COLUMN_BLOCKS = [
   { id: "cost", label: "Себестоимость", cols: ["cost"], show: true, pin: false },
   { id: "now", label: "Цены и маржа сейчас в WB", cols: ["price", "discount_pct", "cur_seller_price", "spp", "site_price", "buyer_price", "cur_commission", "cur_logistics", "cur_tax", "cur_profit", "cur_margin", "cur_roi"], show: true, pin: false },
   { id: "new", label: "Новая цена (расчёт)", cols: ["target_site_price", "calc_price", "calc_discount_pct", "calc_seller_price", "calc_profit", "calc_margin", "calc_roi"], show: true, pin: false },
-  { id: "promo", label: "Акции: текущая и выгодная", cols: ["promo_current", "promo_best_name", "promo_best_price", "promo_best_profit", "promo_best_margin", "promo_best_roi"], show: true, pin: false },
+  { id: "promo", label: "Акции: текущая и выгодная", cols: ["promo_current", "promo_best_name", "promo_best_price", "promo_best_discount", "promo_best_profit", "promo_best_margin", "promo_best_roi"], show: true, pin: false },
   { id: "missing", label: "Не хватает данных", cols: ["missing_text"], show: true, pin: false },
 ];
 const COLS_KEY = "torpeda.columns";
@@ -375,11 +377,33 @@ function showCalculator(r) {
   }).join("");
   document.getElementById("calc-title").textContent = `${r.vendor_code || ""} · ${r.nm_id}`;
   document.getElementById("calc-table").innerHTML = head + body;
+  const promos = r.promos || [];
+  document.getElementById("calc-promos").innerHTML = promos.length
+    ? `<h4>Что поставить, чтобы вступить в акцию</h4><table class="calc-promos"><tr><th>Акция</th><th>Цена до скидки</th><th>Скидка</th><th>Маржа, ₽</th><th>Маржа, %</th></tr>${promos
+        .map((p) => `<tr class="${p.status === "loss" ? "neg" : ""}"><td>${esc(p.name)}${p.in_action ? " ✓" : ""}</td><td>${fmt(p.price)}</td><td>${fmt(p.discount_pct)}</td><td>${fmt(p.profit)}</td><td>${fmt(p.margin_pct)}</td></tr>`)
+        .join("")}</table><p class="hint">✓ товар уже участвует. Красным: в этой акции маржа отрицательная.</p>`
+    : "";
   document.getElementById("calc-missing").textContent = r.missing_text ? `Не хватает: ${r.missing_text}` : "";
   document.getElementById("calc-panel").hidden = false;
 }
 productsGrid.addEventListener("rowClicked", (e) => showCalculator(e.data));
 document.getElementById("calc-close").addEventListener("click", () => { document.getElementById("calc-panel").hidden = true; });
+
+// --- «Новая цена» по акциям ---
+
+document.getElementById("btn-recalc-promos").addEventListener("click", async (e) => {
+  if (!confirm("Заполнить колонку «Новая цена» по самым выгодным акциям? Убыточные акции и товары без себестоимости пропускаются. В WB ничего не отправляется.")) return;
+  e.target.disabled = true;
+  try {
+    const r = await api("POST", "/api/prices/recalc-promos");
+    await loadProducts();
+    setStatus(`По акциям: новая цена у ${r.changed}, убыточных акций ${r.loss}, без себестоимости ${r.no_cost}, без акций ${r.no_promo}`);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    e.target.disabled = false;
+  }
+});
 
 // --- загрузка из WB ---
 
