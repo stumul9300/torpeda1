@@ -104,6 +104,71 @@ def test_product_row_has_best_promo(synced, factory):
     assert r["promo_current"] in (None, "11.11")
 
 
+def _promo_now(factory):
+    from datetime import datetime, timedelta
+
+    from torpeda.db.models import Promotion
+
+    with factory() as s:
+        for p in s.query(Promotion):
+            p.start_at, p.end_at = datetime.now() - timedelta(days=1), datetime.now() + timedelta(days=5)
+        s.commit()
+
+
+def test_recalc_skips_loss_promo(synced, factory):
+    synced.put("/api/products/418020031/cost", json={"cost": "700"})
+    _promo_now(factory)
+    res = synced.post("/api/prices/recalc-promos").json()
+    assert res["loss"] == 1 and res["changed"] == 0  # скидка 60% уводит в минус
+    assert row(synced)["calc_price"] is None
+
+
+def test_recalc_sets_new_price_by_promo(synced, factory):
+    from decimal import Decimal
+
+    from torpeda.db.models import PromotionItem
+
+    synced.put("/api/products/418020031/cost", json={"cost": "700"})
+    _promo_now(factory)
+    with factory() as s:  # акция с небольшой скидкой: маржа остаётся положительной
+        for it in s.query(PromotionItem):
+            it.plan_price, it.plan_discount_pct = Decimal(5200), Decimal(40)
+        s.commit()
+    res = synced.post("/api/prices/recalc-promos").json()
+    assert res["changed"] == 1
+    r = row(synced)
+    assert (Decimal(r["calc_price"]), Decimal(r["calc_discount_pct"])) == (5200, 40)
+    assert synced.get("/api/prices/history").json() == []  # в WB ничего не отправлено
+
+
+def test_best_promo_is_highest_price_without_loss(synced, factory):
+    from datetime import datetime, timedelta
+    from decimal import Decimal
+
+    from torpeda.db.models import Promotion, PromotionItem
+
+    synced.put("/api/products/418020031/cost", json={"cost": "700"})
+    _promo_now(factory)
+    with factory() as s:
+        s.add(Promotion(account_id=1, id=2002, name="Дорогая", type="regular", start_at=datetime.now(),
+                        end_at=datetime.now() + timedelta(days=3)))
+        s.add(PromotionItem(account_id=1, promotion_id=2002, nm_id=418020031, in_action=False,
+                            plan_price=Decimal(5300), plan_discount_pct=Decimal(40)))
+        s.add(Promotion(account_id=1, id=2003, name="Дешёвая", type="regular", start_at=datetime.now(),
+                        end_at=datetime.now() + timedelta(days=3)))
+        s.add(PromotionItem(account_id=1, promotion_id=2003, nm_id=418020031, in_action=False,
+                            plan_price=Decimal(5200), plan_discount_pct=Decimal(40)))
+        s.commit()
+    r = row(synced)
+    assert r["promo_best"]["name"] == "Дорогая"  # 11.11 убыточная и не выбирается
+    assert len(r["promos"]) == 3
+
+
+def test_recalc_skips_without_cost(synced, factory):
+    _promo_now(factory)
+    assert synced.post("/api/prices/recalc-promos").json()["no_cost"] == 1
+
+
 # --- отправка цен ---
 
 

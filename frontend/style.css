@@ -72,3 +72,7 @@ h1 small { font-size: 13px; font-weight: 400; color: #555; margin-left: 8px; }
 #calc-table th, #calc-table td { padding: 3px 6px; border-bottom: 1px solid #eee; text-align: right; }
 #calc-table th:first-child { text-align: left; font-weight: 500; color: #444; }
 #columns-dialog { width: min(560px, 95vw); }
+.calc-promos { border-collapse: collapse; width: 100%; font-size: 12px; }
+.calc-promos th, .calc-promos td { padding: 3px 4px; border-bottom: 1px solid #eee; text-align: right; }
+.calc-promos th:first-child, .calc-promos td:first-child { text-align: left; }
+#calc-promos h4 { margin: 12px 0 4px; font-size: 13px; }

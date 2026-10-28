@@ -178,7 +178,7 @@ SPP_SOURCE = spp_from_orders
 def promo_options(s: Session, ctx: Context, products: dict[int, Product], now: datetime) -> dict[int, dict]:
     """Для каждого артикула: акция, в которой он участвует сейчас, и самая выгодная из ещё не закончившихся.
 
-    Выгодная — с наибольшей прибылью на единицу при плановой цене акции."""
+    Выгодная — с наибольшей ценой продавца после скидки среди акций без убытка."""
     promos = {
         p.id: p
         for p in s.scalars(select(Promotion).where(Promotion.account_id == ACC))
@@ -189,7 +189,7 @@ def promo_options(s: Session, ctx: Context, products: dict[int, Product], now: d
         promo, product = promos.get(it.promotion_id), products.get(it.nm_id)
         if promo is None or product is None:
             continue
-        info = out.setdefault(it.nm_id, {"current": None, "best": None})
+        info = out.setdefault(it.nm_id, {"current": None, "best": None, "all": []})
         started = promo.start_at is None or promo.start_at <= now
         if it.in_action and started:
             info["current"] = promo.name
@@ -197,20 +197,50 @@ def promo_options(s: Session, ctx: Context, products: dict[int, Product], now: d
             continue
         inp, _ = unit_input(ctx, product, it.plan_price, it.plan_discount_pct or ZERO)
         res = calculate(inp)
+        entry = {
+            "name": promo.name,
+            "type": promo.type,
+            "end_at": promo.end_at,
+            "in_action": it.in_action,
+            "price": it.plan_price,  # цена до скидки, которую надо поставить, чтобы вступить в акцию
+            "discount_pct": it.plan_discount_pct,
+            **_result_dict(ctx, res),
+        }
+        info["all"].append(entry)
+        # выгодная по цене: максимальная цена продавца после скидки, убыточные акции только если других нет
+        key = (not res.is_loss, res.seller_price)
         best = info["best"]
-        if best is None or res.profit > best["_profit"]:
-            info["best"] = {
-                "_profit": res.profit,
-                "name": promo.name,
-                "in_action": it.in_action,
-                "price": it.plan_price,
-                "discount_pct": it.plan_discount_pct,
-                **_result_dict(ctx, res),
-            }
+        if best is None or key > best["_key"]:
+            info["best"] = {"_key": key, **entry}
     for info in out.values():
         if info["best"]:
-            info["best"].pop("_profit")
+            info["best"].pop("_key")
     return out
+
+
+def recalc_by_promos(s: Session) -> dict:
+    """Новая цена по самой выгодной акции для каждого артикула (кроме убыточных и без себестоимости).
+
+    Пишет в «Новую цену» цену и скидку акции, в WB ничего не уходит: отправка отдельно, с предпросмотром."""
+    ctx = load_context(s)
+    products = {p.nm_id: p for p in s.scalars(select(Product).where(Product.account_id == ACC))}
+    prices = {p.nm_id: p for p in s.scalars(select(Price).where(Price.account_id == ACC))}
+    result = {"changed": 0, "loss": 0, "no_cost": 0, "no_promo": 0}
+    options = promo_options(s, ctx, products, datetime.now())
+    for nm, price in prices.items():
+        best = options.get(nm, {}).get("best")
+        if best is None:
+            result["no_promo"] += 1
+        elif nm not in ctx.costs:
+            result["no_cost"] += 1
+        elif best["status"] == "loss":
+            result["loss"] += 1
+        else:
+            price.calc_price = best["price"]
+            price.calc_discount_pct = best["discount_pct"] if best["discount_pct"] is not None else ZERO
+            result["changed"] += 1
+    s.commit()
+    return result
 
 
 def product_rows(s: Session) -> list[dict]:
@@ -253,6 +283,7 @@ def product_rows(s: Session) -> list[dict]:
             "calc": None,
             "promo_current": promos.get(p.nm_id, {}).get("current"),
             "promo_best": promos.get(p.nm_id, {}).get("best"),
+            "promos": promos.get(p.nm_id, {}).get("all", []),
             "missing": [],
         }
         if price:
