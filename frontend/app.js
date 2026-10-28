@@ -75,6 +75,8 @@ const flatten = (r) => ({
   promo_best_name: r.promo_best?.name ?? null,
   promo_best_price: num(r.promo_best?.price),
   promo_best_discount: num(r.promo_best?.discount_pct),
+  promo_delta: num(r.promo_best?.delta_seller),
+  promo_advice: r.promo_best?.advice ?? r.promo_note ?? null,
   promo_best_profit: num(r.promo_best?.profit),
   promo_best_margin: num(r.promo_best?.margin_pct),
   promo_best_roi: num(r.promo_best?.roi_pct),
@@ -192,6 +194,8 @@ const productColumns = [
         valueFormatter: (p) => (p.value == null ? "" : p.value + (p.data.promo_best?.in_action ? " (участвует)" : "")),
         headerTooltip: "Акция с самой высокой ценой продавца после скидки среди акций без убытка",
       },
+      { headerName: "Что сделать для вступления", field: "promo_advice", width: 340, wrapText: true, autoHeight: false, tooltipField: "promo_advice", headerTooltip: "Если цена выше порога акции, здесь написано, на сколько её понизить и какая будет маржа" },
+      { headerName: "Изменить цену продавца, ₽", field: "promo_delta", width: 120, valueFormatter: rub, cellClass: signClass, type: "numericColumn", headerTooltip: "Минус: цену нужно понизить, чтобы вступить в акцию" },
       { headerName: "Цена до скидки для вступления", field: "promo_best_price", width: 130, valueFormatter: rub, type: "numericColumn", headerTooltip: "Цена до скидки, которую нужно поставить, чтобы вступить в выгодную акцию" },
       { headerName: "Скидка для вступления", field: "promo_best_discount", width: 100, valueFormatter: pct, type: "numericColumn" },
       { headerName: "Маржа в акции, ₽", field: "promo_best_profit", width: 110, valueFormatter: rub, cellClass: signClass, type: "numericColumn" },
@@ -213,7 +217,7 @@ const COLUMN_BLOCKS = [
   { id: "cost", label: "Себестоимость", cols: ["cost"], show: true, pin: false },
   { id: "now", label: "Цены и маржа сейчас в WB", cols: ["price", "discount_pct", "cur_seller_price", "spp", "site_price", "buyer_price", "cur_commission", "cur_logistics", "cur_tax", "cur_profit", "cur_margin", "cur_roi"], show: true, pin: false },
   { id: "new", label: "Новая цена (расчёт)", cols: ["target_site_price", "calc_price", "calc_discount_pct", "calc_seller_price", "calc_profit", "calc_margin", "calc_roi"], show: true, pin: false },
-  { id: "promo", label: "Акции: текущая и выгодная", cols: ["promo_current", "promo_best_name", "promo_best_price", "promo_best_discount", "promo_best_profit", "promo_best_margin", "promo_best_roi"], show: true, pin: false },
+  { id: "promo", label: "Акции: текущая и выгодная", cols: ["promo_current", "promo_best_name", "promo_advice", "promo_delta", "promo_best_price", "promo_best_discount", "promo_best_profit", "promo_best_margin", "promo_best_roi"], show: true, pin: false },
   { id: "missing", label: "Не хватает данных", cols: ["missing_text"], show: true, pin: false },
 ];
 const COLS_KEY = "torpeda.columns";
@@ -379,10 +383,10 @@ function showCalculator(r) {
   document.getElementById("calc-table").innerHTML = head + body;
   const promos = r.promos || [];
   document.getElementById("calc-promos").innerHTML = promos.length
-    ? `<h4>Что поставить, чтобы вступить в акцию</h4><table class="calc-promos"><tr><th>Акция</th><th>Цена до скидки</th><th>Скидка</th><th>Маржа, ₽</th><th>Маржа, %</th></tr>${promos
-        .map((p) => `<tr class="${p.status === "loss" ? "neg" : ""}"><td>${esc(p.name)}${p.in_action ? " ✓" : ""}</td><td>${fmt(p.price)}</td><td>${fmt(p.discount_pct)}</td><td>${fmt(p.profit)}</td><td>${fmt(p.margin_pct)}</td></tr>`)
-        .join("")}</table><p class="hint">✓ товар уже участвует. Красным: в этой акции маржа отрицательная.</p>`
-    : "";
+    ? `<h4>Что поставить, чтобы вступить в акцию</h4><table class="calc-promos"><tr><th>Акция</th><th>Цена до скидки</th><th>Скидка</th><th>Изменить, ₽</th><th>Маржа, ₽</th><th>Маржа, %</th></tr>${promos
+        .map((p) => `<tr class="${p.status === "loss" ? "neg" : ""}"><td>${esc(p.name)}${p.in_action ? " ✓" : ""}</td><td>${fmt(p.price)}</td><td>${fmt(p.discount_pct)}</td><td>${p.in_action ? "уже в акции" : fmt(p.delta_seller)}</td><td>${fmt(p.profit)}</td><td>${fmt(p.margin_pct)}</td></tr>`)
+        .join("")}</table><p class="hint">✓ товар уже участвует. «Изменить» это разница цены продавца: минус значит цену надо понизить. Красным: в этой акции маржа отрицательная.</p>`
+    : `<p class="missing">${esc(r.promo_note || "")}</p>`;
   document.getElementById("calc-missing").textContent = r.missing_text ? `Не хватает: ${r.missing_text}` : "";
   document.getElementById("calc-panel").hidden = false;
 }

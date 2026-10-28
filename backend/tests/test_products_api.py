@@ -164,6 +164,40 @@ def test_best_promo_is_highest_price_without_loss(synced, factory):
     assert len(r["promos"]) == 3
 
 
+def test_promo_note_explains_empty_cells(synced, factory):
+    from torpeda.db.models import Promotion, PromotionItem
+
+    _promo_now(factory)
+    assert row(synced)["promo_note"] is None  # цена для вступления есть
+    with factory() as s:  # у товара не осталось акций
+        s.query(PromotionItem).delete()
+        s.commit()
+    assert "не предлагает" in row(synced)["promo_note"]
+    with factory() as s:  # акции не загружены совсем
+        s.query(Promotion).delete()
+        s.commit()
+    assert "не загружены" in row(synced)["promo_note"]
+
+
+def test_promo_advice_lower_price(synced, factory):
+    from decimal import Decimal
+
+    from torpeda.db.models import PromotionItem
+
+    synced.put("/api/products/418020031/cost", json={"cost": "700"})
+    _promo_now(factory)
+    best = row(synced)["promo_best"]
+    assert Decimal(best["cur_seller_price"]) == Decimal("3073.80")
+    assert Decimal(best["delta_seller"]) < 0  # плановая цена 11.11 ниже нынешней
+    assert best["advice"].startswith("понизить цену продавца на")
+    assert "убыток" in best["advice"]
+    with factory() as s:  # цена акции выше нынешней: снижать не нужно
+        for it in s.query(PromotionItem):
+            it.plan_price, it.plan_discount_pct = Decimal(6000), Decimal(40)
+        s.commit()
+    assert "без снижения" in row(synced)["promo_best"]["advice"]
+
+
 def test_recalc_skips_without_cost(synced, factory):
     _promo_now(factory)
     assert synced.post("/api/prices/recalc-promos").json()["no_cost"] == 1
