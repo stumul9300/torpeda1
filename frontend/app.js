@@ -586,22 +586,72 @@ const promoGrid = agGrid.createGrid(document.getElementById("grid-promo"), {
   rowClassRules: { "row-loss": (p) => p.data.promo?.status === "loss", "row-risk": (p) => p.data.promo?.status === "risk" },
 });
 
+const BEST = "best";
+const bestCols = [
+  { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 120 },
+  { headerName: "Арт. продавца", field: "vendor_code", width: 120 },
+  { headerName: "Самая выгодная акция", valueGetter: (p) => p.data.promo_best.name, width: 210 },
+  { headerName: "Всего акций", valueGetter: (p) => p.data.promos.length, width: 90 },
+  { headerName: "Участвует", valueGetter: (p) => (p.data.promo_best.in_action ? "да" : "нет"), width: 90 },
+  { headerName: "Цена продавца сейчас", valueGetter: (p) => num(p.data.promo_best.cur_seller_price), valueFormatter: rub, width: 130 },
+  { headerName: "Цена для вступления", valueGetter: (p) => num(p.data.promo_best.plan_seller_price), valueFormatter: rub, width: 130 },
+  { headerName: "Понизить, ₽", valueGetter: (p) => (p.data.promo_best.delta_seller == null ? null : Math.max(0, -num(p.data.promo_best.delta_seller))), valueFormatter: rub, width: 110 },
+  { headerName: "Понизить, %", valueGetter: (p) => (p.data.promo_best.delta_pct == null ? null : Math.max(0, -num(p.data.promo_best.delta_pct))), valueFormatter: pct, width: 110 },
+  { headerName: "Цена до скидки / скидка", valueGetter: (p) => `${rub({ value: num(p.data.promo_best.price) })} / ${Math.round(num(p.data.promo_best.discount_pct))}%`, width: 170 },
+  { headerName: "Прибыль, ₽", valueGetter: (p) => num(p.data.promo_best.profit), valueFormatter: rub, cellClass: signClass, width: 110 },
+  { headerName: "Маржа, %", valueGetter: (p) => num(p.data.promo_best.margin_pct), valueFormatter: pct, width: 100 },
+  { headerName: "ROI, %", valueGetter: (p) => num(p.data.promo_best.roi_pct), valueFormatter: pct, width: 90 },
+  { headerName: "Что сделать", valueGetter: (p) => p.data.promo_best.advice, width: 320 },
+];
+const promoCols = promoGrid.getColumnDefs();
 const promoSelect = document.getElementById("promo-select");
 async function loadPromotions() {
   const promos = await api("GET", "/api/promotions");
-  promoSelect.innerHTML = promos
+  promoSelect.innerHTML =
+    `<option value="${BEST}">Лучшая акция по каждому товару</option>` +
+    promos
     .map((p) => `<option value="${p.id}">${p.name} (${(p.start_at || "").slice(0, 10)} — ${(p.end_at || "").slice(0, 10)})</option>`)
     .join("");
-  if (promos.length) await loadPromotion(promos[0].id);
+  if (promos.length) await loadPromotion(promoSelect.value || BEST);
   else promoGrid.setGridOption("rowData", []);
 }
 async function loadPromotion(id) {
+  if (id === BEST) {
+    const rows = await api("GET", "/api/promotions-best");
+    const loss = rows.filter((r) => r.promo_best.status === "loss").length;
+    document.getElementById("promo-info").textContent = `Товаров с ценой для вступления: ${rows.length} · в убыток: ${loss}`;
+    promoGrid.setGridOption("columnDefs", bestCols);
+    promoGrid.setGridOption("rowData", rows);
+    return;
+  }
+  promoGrid.setGridOption("columnDefs", promoCols);
   const data = await api("GET", `/api/promotions/${id}`);
   const loss = data.items.filter((i) => i.promo?.status === "loss").length;
   document.getElementById("promo-info").textContent = `Товаров: ${data.items.length} · в убыток в акции: ${loss}`;
   promoGrid.setGridOption("rowData", data.items);
 }
 promoSelect.addEventListener("change", () => loadPromotion(promoSelect.value));
+
+const promoFiles = document.getElementById("promo-files");
+document.getElementById("btn-promo-upload").addEventListener("click", () => promoFiles.click());
+promoFiles.addEventListener("change", async () => {
+  const form = new FormData();
+  for (const f of promoFiles.files) form.append("files", f);
+  promoFiles.value = "";
+  try {
+    const res = await fetch("/api/promotions/import", { method: "POST", body: form });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    const data = await res.json();
+    const bad = data.files.filter((f) => f.error);
+    alert(`Загружено акций: ${data.promotions}, строк товаров: ${data.items}.` +
+      (bad.length ? `\n\nНе загрузились:\n${bad.map((f) => `${f.file}: ${f.error}`).join("\n")}` : "") +
+      "\n\nНажмите «Пересчитать цены по акциям» на вкладке «Товары», чтобы подставить цены в «Новую цену».");
+    await loadPromotions();
+    await loadProducts();
+  } catch (e) {
+    alert("Не получилось загрузить акции: " + e.message);
+  }
+});
 
 // --- отчёты ---
 

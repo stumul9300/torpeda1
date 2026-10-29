@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from torpeda import __version__, config, costs_excel, diagnose, mpstats, pricing, services, updater
+from torpeda import __version__, config, costs_excel, diagnose, mpstats, pricing, promo_import, services, updater
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, clean_key, get_settings, key_source, masked_keys, save_keys
@@ -307,6 +307,17 @@ def list_promotions(s: Session = Depends(get_session)) -> list[dict]:
         }
         for p in promos
     ]
+
+
+@app.post("/api/promotions/import")
+async def import_promotions(files: list[UploadFile], s: Session = Depends(get_session)) -> dict:
+    return promo_import.import_files(s, [(f.filename or "", await f.read()) for f in files])
+
+
+@app.get("/api/promotions-best")
+def promotions_best(s: Session = Depends(get_session)) -> list[dict]:
+    """Товары, для которых есть цена для вступления хотя бы в одну акцию, с самой выгодной акцией."""
+    return [r for r in services.product_rows(s) if r.get("promo_best")]
 
 
 @app.get("/api/promotions/{promotion_id}")
