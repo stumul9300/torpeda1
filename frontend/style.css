@@ -79,3 +79,7 @@ h1 small { font-size: 13px; font-weight: 400; color: #555; margin-left: 8px; }
 .calc-promos th, .calc-promos td { padding: 3px 4px; border-bottom: 1px solid #eee; text-align: right; }
 .calc-promos th:first-child, .calc-promos td:first-child { text-align: left; }
 #calc-promos h4 { margin: 12px 0 4px; font-size: 13px; }
+
+.top-scroll { overflow-x: auto; overflow-y: hidden; height: 16px; width: 100%; }
+.top-scroll > div { height: 1px; }
+.grid-wrap { flex: 1; min-width: 0; width: 100%; }

@@ -43,6 +43,45 @@ document.querySelectorAll(".tab").forEach((b) =>
   })
 );
 
+// --- горизонтальная прокрутка сверху таблицы ---
+
+// Полоса прокрутки таблицы внизу длинного списка не видна: дублируем её над таблицей и держим в связке с настоящей.
+function addTopScroll(gridId) {
+  const grid = document.getElementById(gridId);
+  const bar = document.createElement("div");
+  bar.className = "top-scroll";
+  const inner = document.createElement("div");
+  bar.appendChild(inner);
+  const wrap = document.createElement("div");
+  wrap.className = "grid-wrap";
+  grid.parentNode.insertBefore(wrap, grid);
+  wrap.append(bar, grid);
+  let lock = false;
+  const viewport = () => grid.querySelector(".ag-body-horizontal-scroll-viewport");
+  const sync = () => {
+    const vp = viewport();
+    if (!vp) return;
+    inner.style.width = vp.scrollWidth + "px";
+    bar.style.display = vp.scrollWidth > vp.clientWidth + 1 ? "block" : "none";
+  };
+  bar.addEventListener("scroll", () => {
+    const vp = viewport();
+    if (!vp || lock) return;
+    lock = true;
+    vp.scrollLeft = bar.scrollLeft;
+    lock = false;
+  });
+  grid.addEventListener("scroll", (e) => {
+    if (!e.target.classList?.contains("ag-body-horizontal-scroll-viewport") || lock) return;
+    lock = true;
+    bar.scrollLeft = e.target.scrollLeft;
+    lock = false;
+  }, true);
+  new ResizeObserver(sync).observe(grid);
+  setInterval(sync, 1000); // ширина меняется при показе колонок и перетаскивании границ
+  sync();
+}
+
 // --- товары ---
 
 const flatten = (r) => ({
@@ -246,6 +285,7 @@ let hideNoStock = true;
 let onlyLoss = false;
 let onlyChanged = false;
 
+addTopScroll("grid-products");
 const productsGrid = agGrid.createGrid(document.getElementById("grid-products"), {
   columnDefs: productColumns,
   rowHeight: 56,
@@ -580,6 +620,7 @@ document.getElementById("btn-history-refresh").addEventListener("click", loadHis
 
 // --- акции ---
 
+addTopScroll("grid-promo");
 const promoGrid = agGrid.createGrid(document.getElementById("grid-promo"), {
   columnDefs: [
     { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 120 },
