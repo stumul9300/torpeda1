@@ -189,7 +189,7 @@ def _promo_advice(entry: dict, cur: Price | None, plan_seller: Decimal) -> dict:
     extra["delta_seller"] = delta.quantize(Decimal("0.01"))
     extra["delta_pct"] = (delta / cur_seller * 100).quantize(Decimal("0.01")) if cur_seller else None
     if delta >= 0:
-        extra["advice"] = "цена уже подходит: можно вступать без снижения"
+        extra["advice"] = "не в акции, но цена уже подходит: можно вступить без снижения"
         return extra
     loss = ", убыток" if entry["status"] == "loss" else ""
     extra["advice"] = (
