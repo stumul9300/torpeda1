@@ -143,7 +143,11 @@
     <div class="toolbar">
       <select id="promo-select"></select>
       <span id="promo-info"></span>
+      <span class="spacer"></span>
+      <button type="button" id="btn-promo-upload" title="Выгрузки акций из кабинета WB (xlsx), можно сразу много файлов">Загрузить акции из файлов…</button>
+      <input type="file" id="promo-files" accept=".xlsx" multiple hidden>
     </div>
+    <p class="hint">Кабинет WB → Календарь акций → акция → «Настроить список товаров» → скачать Excel. Выберите все файлы сразу. Акции из файлов используются во всех расчётах и важнее одноимённых акций из WB. Повторная загрузка заменяет прежние данные акции.</p>
     <div id="grid-promo" class="ag-theme-quartz grid"></div>
   </section>
 

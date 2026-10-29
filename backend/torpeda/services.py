@@ -204,10 +204,12 @@ def promo_options(
     """Для каждого артикула: акция, в которой он участвует сейчас, и самая выгодная из ещё не закончившихся.
 
     Выгодная — с наибольшей ценой продавца после скидки среди акций без убытка."""
+    all_promos = list(s.scalars(select(Promotion).where(Promotion.account_id == ACC)))
+    file_names = {p.name for p in all_promos if p.id < 0}  # акции из файлов важнее одноимённых из API
     promos = {
         p.id: p
-        for p in s.scalars(select(Promotion).where(Promotion.account_id == ACC))
-        if p.end_at is None or p.end_at >= now
+        for p in all_promos
+        if (p.end_at is None or p.end_at >= now) and (p.id < 0 or p.name not in file_names)
     }
     out: dict[int, dict] = {}
     for it in s.scalars(select(PromotionItem).where(PromotionItem.account_id == ACC)):
