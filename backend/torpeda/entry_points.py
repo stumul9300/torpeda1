@@ -65,7 +65,7 @@ def parse(content: bytes) -> list[dict]:
     except Exception as e:  # noqa: BLE001 - любой нечитаемый файл — одна и та же понятная ошибка
         raise ValueError("не получилось открыть файл как Excel (.xlsx)") from e
     rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    for hi, raw in enumerate(rows[:15]):  # заголовок может быть не в первой строке
+    for hi, raw in enumerate(rows[:15]):  # noqa: B007 - номер строки заголовка нужен после цикла  # заголовок может быть не в первой строке
         header = [str(h).strip().lower() if h is not None else "" for h in raw]
         nm_i = _find(header, NM_HEADS)
         if nm_i is not None:
@@ -96,7 +96,8 @@ def parse(content: bytes) -> list[dict]:
             if name and i not in (nm_i, point_i, day_i) and not any(x in header[i] for x in SKIP_HEADS):
                 if (v := _num(r[i])) is not None:
                     metrics[name] = v
-        out.append({"nm_id": int(nm), "point": point, "day": _day(r[day_i]) if day_i is not None else None, "metrics": metrics})
+        day = _day(r[day_i]) if day_i is not None else None
+        out.append({"nm_id": int(nm), "point": point, "day": day, "metrics": metrics})
     if not out:
         raise ValueError("в файле нет строк с артикулом и точкой входа")
     return out

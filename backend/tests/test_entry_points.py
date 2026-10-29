@@ -14,7 +14,8 @@ def test_import_and_summary(api):
         (111, "a", "Каталог", "28.10.2026", 50, 5, 10),
         (222, "b", "Поиск", "28.10.2026", 10, 1, 10),
     )
-    body = api.post("/api/entry-points/import", files=[("files", ("т.xlsx", data)), ("files", ("bad.xlsx", b"x"))]).json()
+    files = [("files", ("т.xlsx", data)), ("files", ("bad.xlsx", b"x"))]
+    body = api.post("/api/entry-points/import", files=files).json()
     assert body["rows"] == 4 and any("error" in f for f in body["files"])
 
     res = api.get("/api/entry-points", params={"nm_id": 111}).json()
