@@ -227,7 +227,7 @@ def test_promo_advice_lower_price(synced, factory):
         for it in s.query(PromotionItem):
             it.plan_price, it.plan_discount_pct = Decimal(6000), Decimal(40)
         s.commit()
-    assert "без снижения" in row(synced)["promo_best"]["advice"]
+    assert "цену менять не нужно" in row(synced)["promo_best"]["advice"]
 
 
 def test_recalc_skips_without_cost(synced, factory):
