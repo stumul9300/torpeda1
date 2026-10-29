@@ -524,6 +524,22 @@ def sync_ads(client: WBClient, s: Session, date_from: date, date_to: date) -> di
     return {"campaigns": len(ids), "stats": len(stats), "costs": len(costs)}
 
 
+def _plan_before_discount(it: dict) -> tuple[Decimal | None, Decimal | None]:
+    """Цена до скидки и скидка для вступления в акцию.
+
+    WB отдаёт planPrice как цену для покупателя в акции (с уже применённой скидкой), как и колонка «Плановая цена»
+    в выгрузке из кабинета. Для расчёта нужна цена до скидки: это текущая цена товара, а скидку берём planDiscount
+    или, если её нет, подбираем так, чтобы цена после скидки не превышала плановую."""
+    plan, discount, price = _dec(it.get("planPrice")), _dec(it.get("planDiscount")), _dec(it.get("price"))
+    if plan is None:
+        return None, discount
+    if price and discount is None:
+        discount = max((1 - plan / price) * 100, Decimal(0)).to_integral_value(rounding="ROUND_CEILING")
+    if not price and discount is not None and discount < 100:
+        price = (plan / (1 - discount / 100)).quantize(Decimal("1"))
+    return price, discount
+
+
 def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, int, int]:
     """Акции и их товары. Возвращает (акций, товаров в них, акций без списка товаров).
 
@@ -553,6 +569,7 @@ def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, i
             skipped += 1
             continue
         for it in promo_items:
+            plan_price, plan_discount = _plan_before_discount(it)
             s.merge(
                 PromotionItem(
                     account_id=ACC,
@@ -561,8 +578,8 @@ def sync_promotions(client: WBClient, s: Session, now: datetime) -> tuple[int, i
                     in_action=bool(it.get("inAction")),
                     price=_dec(it.get("price")),
                     discount_pct=_dec(it.get("discount")),
-                    plan_price=_dec(it.get("planPrice")),
-                    plan_discount_pct=_dec(it.get("planDiscount")),
+                    plan_price=plan_price,
+                    plan_discount_pct=plan_discount,
                 )
             )
             items += 1

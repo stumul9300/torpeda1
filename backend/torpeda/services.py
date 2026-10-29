@@ -207,9 +207,7 @@ def promo_options(
     all_promos = list(s.scalars(select(Promotion).where(Promotion.account_id == ACC)))
     file_names = {p.name for p in all_promos if p.id < 0}  # акции из файлов важнее одноимённых из API
     promos = {
-        p.id: p
-        for p in all_promos
-        if (p.end_at is None or p.end_at >= now) and (p.id < 0 or p.name not in file_names)
+        p.id: p for p in all_promos if (p.end_at is None or p.end_at >= now) and (p.id < 0 or p.name not in file_names)
     }
     out: dict[int, dict] = {}
     for it in s.scalars(select(PromotionItem).where(PromotionItem.account_id == ACC)):
@@ -273,7 +271,7 @@ def recalc_by_promos(s: Session) -> dict:
     return result
 
 
-def _promo_note(any_promos: bool, info: dict | None) -> str | None:
+def _promo_note(any_promos: bool, info: dict | None, any_files: bool = True) -> str | None:
     """Почему по артикулу нет цены для вступления в акцию. Если цена есть, пояснение не нужно."""
     if info and info.get("best"):
         return None
@@ -281,7 +279,9 @@ def _promo_note(any_promos: bool, info: dict | None) -> str | None:
         return "акции не загружены: нажмите «Загрузить из WB»"
     if info and info.get("current"):
         return f"участвует в «{info['current']}», плановой цены от WB нет"
-    return "WB не предлагает этому товару действующих акций"
+    if not any_files:
+        return "WB по API акций не предлагает; автоакции берутся из файлов: «Акции» → «Загрузить акции из файлов»"
+    return "нет ни в акциях из WB, ни в загруженных файлах акций (WB не предлагает этому товару действующих акций)"
 
 
 def product_rows(s: Session) -> list[dict]:
@@ -301,10 +301,13 @@ def product_rows(s: Session) -> list[dict]:
     promos = promo_options(s, ctx, {p.nm_id: p for p in all_products}, now, prices)
     any_promos = bool(
         s.scalar(
-            select(func.count()).select_from(Promotion).where(
-                Promotion.account_id == ACC, (Promotion.end_at.is_(None)) | (Promotion.end_at >= now)
-            )
+            select(func.count())
+            .select_from(Promotion)
+            .where(Promotion.account_id == ACC, (Promotion.end_at.is_(None)) | (Promotion.end_at >= now))
         )
+    )
+    any_files = bool(
+        s.scalar(select(func.count()).select_from(Promotion).where(Promotion.account_id == ACC, Promotion.id < 0))
     )
     rows = []
     for p in all_products:
@@ -333,7 +336,7 @@ def product_rows(s: Session) -> list[dict]:
             "promo_current": promos.get(p.nm_id, {}).get("current"),
             "promo_best": promos.get(p.nm_id, {}).get("best"),
             "promos": promos.get(p.nm_id, {}).get("all", []),
-            "promo_note": _promo_note(any_promos, promos.get(p.nm_id)),
+            "promo_note": _promo_note(any_promos, promos.get(p.nm_id), any_files),
             "missing": [],
         }
         if price:
@@ -366,8 +369,7 @@ def promotion_rows(s: Session, promotion_id: int) -> dict | None:
             inp, missing = unit_input(ctx, product, it.price, it.discount_pct or ZERO)
             row["current"] = _result_dict(ctx, calculate(inp))
             row["missing"] = missing
-        # Считаем, что planPrice — цена до скидки для акции, а planDiscount — скидка на неё.
-        # Проверить на реальных данных WB после первой загрузки.
+        # plan_price — цена до скидки, plan_discount_pct — скидка для вступления (см. sync._plan_before_discount).
         if it.plan_price is not None:
             inp, missing = unit_input(ctx, product, it.plan_price, it.plan_discount_pct or ZERO)
             promo_result = calculate(inp)
