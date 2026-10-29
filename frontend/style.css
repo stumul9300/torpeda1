@@ -66,6 +66,7 @@ h1 small { font-size: 13px; font-weight: 400; color: #555; margin-left: 8px; }
 .thumb { height: 48px; width: 36px; object-fit: cover; border-radius: 4px; display: block; margin-top: 3px; }
 .spp-at { font-size: 10px; color: #666; }
 .spp-at.stale { color: #b0b0b0; }
+.cell-entry { background: #ffd9a8 !important; font-weight: 600; }
 .cell-target { background: #fff3c4 !important; font-weight: 600; }
 
 .products-layout { display: flex; gap: 12px; align-items: flex-start; }
