@@ -530,6 +530,32 @@ def wb_sync_site_prices() -> dict:
     return _analytics_sync("цены на сайте", lambda s: {"products": sync_site_prices(s)})
 
 
+class MpstatsKeyRequest(BaseModel):
+    token: str = ""  # пусто — удалить сохранённый токен
+
+
+def mpstats_key_view() -> dict:
+    value, source = mpstats.token_source()
+    return {"set": bool(value), "tail": value[-4:] if value else None, "source": source}
+
+
+@app.get("/api/mpstats/key")
+def mpstats_key() -> dict:
+    return mpstats_key_view()
+
+
+@app.put("/api/mpstats/key")
+def mpstats_save_key(req: MpstatsKeyRequest) -> dict:
+    """Сохраняет токен MPSTATS на этом компьютере и сразу проверяет его живым запросом."""
+    mpstats.save_token(req.token)
+    return {**mpstats_key_view(), **mpstats.check_token()}
+
+
+@app.post("/api/mpstats/check")
+def mpstats_check() -> dict:
+    return {**mpstats_key_view(), **mpstats.check_token()}
+
+
 @app.get("/api/mpstats")
 def mpstats_report(skus: str = "", days: int = Query(30, ge=1, le=365), s: Session = Depends(get_session)) -> dict:
     """Продажи, цены и остатки по артикулам из MPSTATS и наша цена на сайте из последней загрузки WB."""

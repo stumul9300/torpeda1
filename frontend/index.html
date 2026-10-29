@@ -187,7 +187,14 @@
 
     <div class="settings" id="mpstats-box">
       <h2>Данные MPSTATS</h2>
-      <p class="hint">Продажи, цены и остатки по артикулам за последние дни. Токен берётся из строки MPSTATS_TOKEN в файле backend\.env.</p>
+      <p class="hint">Продажи, цены и остатки по артикулам за последние дни. Токен хранится только на этом компьютере.</p>
+      <label>Токен MPSTATS (mpstats.io, «Личный кабинет», блок «API токен»)
+        <textarea id="mpstats-token" rows="2" autocomplete="off" spellcheck="false" data-lpignore="true" placeholder="вставьте токен сюда"></textarea>
+      </label>
+      <div id="mpstats-key-current" class="key-now"></div>
+      <button type="button" id="btn-mpstats-save" class="primary">Сохранить и проверить токен</button>
+      <button type="button" id="btn-mpstats-clear">Удалить токен</button>
+      <pre id="mpstats-key-result"></pre>
       <label>Артикулы WB через запятую (пусто — пять артикулов по умолчанию)
         <input id="mpstats-skus" type="text" autocomplete="off" placeholder="1803104278, 482235433, 955259665, 482235434, 1803104279">
       </label>

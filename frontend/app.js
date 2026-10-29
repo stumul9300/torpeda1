@@ -862,6 +862,36 @@ async function syncSitePrices() {
   }
 }
 document.getElementById("btn-site-prices").addEventListener("click", syncSitePrices);
+function showMpstatsKey(res) {
+  document.getElementById("mpstats-key-current").textContent = res.set
+    ? `Сейчас используется токен, окончание …${res.tail} (${res.source})`
+    : "Токен не задан";
+  if (res.text) document.getElementById("mpstats-key-result").textContent = res.text;
+}
+async function mpstatsKey(method, url, body, waiting) {
+  const result = document.getElementById("mpstats-key-result");
+  result.textContent = waiting;
+  try {
+    showMpstatsKey(await api(method, url, body));
+  } catch (err) {
+    result.textContent = err.message;
+  }
+}
+document.getElementById("btn-mpstats-save").addEventListener("click", async () => {
+  const field = document.getElementById("mpstats-token");
+  const token = field.value.replace(/\s+/g, "");
+  if (!token) {
+    document.getElementById("mpstats-key-result").textContent = "Поле пустое: вставьте токен и нажмите «Сохранить и проверить токен».";
+    return;
+  }
+  await mpstatsKey("PUT", "/api/mpstats/key", { token }, "Сохраняю и проверяю…");
+  field.value = "";
+});
+document.getElementById("btn-mpstats-clear").addEventListener("click", () =>
+  mpstatsKey("PUT", "/api/mpstats/key", { token: "" }, "Удаляю…"),
+);
+api("GET", "/api/mpstats/key").then(showMpstatsKey).catch(() => {});
+
 async function loadMpstats() {
   const result = document.getElementById("mpstats-result");
   const table = document.getElementById("mpstats-table");

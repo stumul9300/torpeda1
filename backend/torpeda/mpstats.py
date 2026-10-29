@@ -24,12 +24,15 @@ from datetime import date, timedelta
 from typing import Any
 
 import httpx
+from dotenv import dotenv_values
 
-from torpeda.config import DATA_DIR, clean_key
+from torpeda import config
+from torpeda.config import BACKEND_DIR, DATA_DIR, clean_key, read_keys_file
 
 BASE = "https://mpstats.io/api/analytics/v1/wb"
 DEFAULT_SKUS = (1803104278, 482235433, 955259665, 482235434, 1803104279)
 OUT_DIR = DATA_DIR / "mpstats"
+KEY_NAME = "mpstats"  # ключ в keys.json рядом с ключами WB
 
 # Имена полей в ответах MPSTATS менялись между версиями API: берём первое найденное.
 DATE_KEYS = ("data", "date", "day")
@@ -44,10 +47,85 @@ class MpstatsError(RuntimeError):
     pass
 
 
+def saved_token() -> str:
+    """Токен, сохранённый в программе (вкладка «Настройки»): лежит рядом с ключами WB, на этом компьютере."""
+    return clean_token(read_keys_file().get(KEY_NAME, ""))
+
+
+def save_token(value: str) -> None:
+    """Сохраняет токен из интерфейса. Пустая строка удаляет."""
+    keys = read_keys_file()
+    if value := clean_token(value):
+        keys[KEY_NAME] = value
+    else:
+        keys.pop(KEY_NAME, None)
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    config.KEYS_FILE.write_text(json.dumps(keys), encoding="utf-8")
+
+
+def token_source() -> tuple[str, str]:
+    """Токен и откуда он взят: сохранённый в программе важнее .env и переменной окружения, как и для ключей WB."""
+    if saved := saved_token():
+        return saved, "программа (вкладка «Настройки»)"
+    env_file = BACKEND_DIR / ".env"
+    from_file = clean_token(dotenv_values(env_file, encoding="utf-8-sig").get("MPSTATS_TOKEN") or "")
+    from_env = clean_token(os.getenv("MPSTATS_TOKEN", ""))
+    if from_env and from_env != from_file:
+        return from_env, "переменная окружения MPSTATS_TOKEN"
+    if from_file:
+        return from_file, f"файл {env_file}"
+    return "", ""
+
+
+def check_token() -> dict[str, Any]:
+    """Живая проверка: остаток запросов по тарифу. Возвращает понятный итог для интерфейса, токен не показывает."""
+    value, source = token_source()
+    if not value:
+        return {"ok": False, "text": "Токен не задан: вставьте его в поле и нажмите «Сохранить»."}
+    headers = {"X-Mpstats-TOKEN": value, "Content-Type": "application/json"}
+    try:
+        resp = httpx.get("https://mpstats.io/api/user/report_api_limit", headers=headers, timeout=30)
+    except httpx.HTTPError as exc:
+        return {"ok": False, "text": f"Нет связи с MPSTATS: {exc}"}
+    if resp.status_code == 200:
+        data = resp.json() if resp.content else {}
+        available, used = num(data.get("available")), num(data.get("use"))
+        left = (
+            f", осталось запросов {available - used:.0f} из {available:.0f}"
+            if available is not None and used is not None
+            else ""
+        )
+        return {"ok": True, "text": f"Токен принят (…{value[-4:]}, {source}){left}."}
+    if resp.status_code == 401:
+        return {
+            "ok": False,
+            "text": "MPSTATS не принял токен (401). Скопируйте его заново целиком на mpstats.io в «Личном кабинете», "
+            f"блок «API токен». Сейчас {describe(value, source)}.",
+        }
+    return {"ok": False, "text": f"MPSTATS ответил {resp.status_code}: {resp.text[:200]}"}
+
+
+def clean_token(value: str) -> str:
+    """Токен без пробелов, кавычек и приставок, которые попадают при копировании."""
+    value = clean_key(value).strip("\"'")
+    for prefix in ("MPSTATS_TOKEN=", "X-Mpstats-TOKEN:", "Bearer"):
+        if value.lower().startswith(prefix.lower()):
+            value = value[len(prefix) :]
+    return value.strip("\"'")
+
+
+def describe(value: str, source: str) -> str:
+    """Для сообщений об ошибке: откуда взят токен и его размер, сам токен не показывается."""
+    return f"токен взят из: {source}; длина {len(value)} симв., точек {value.count('.')}, окончание …{value[-4:]}"
+
+
 def token() -> str:
-    if value := clean_key(os.getenv("MPSTATS_TOKEN", "")):
+    if value := token_source()[0]:
         return value
-    raise MpstatsError("Нет токена MPSTATS: добавьте строку MPSTATS_TOKEN=... в файл backend\\.env")
+    raise MpstatsError(
+        f"Нет токена MPSTATS: добавьте строку MPSTATS_TOKEN=... в файл {BACKEND_DIR / '.env'} "
+        "(это папка той копии Торпеды, которая сейчас запущена)"
+    )
 
 
 def get(client: httpx.Client, path: str, params: dict[str, Any] | None = None) -> Any:
@@ -60,7 +138,12 @@ def get(client: httpx.Client, path: str, params: dict[str, Any] | None = None) -
             time.sleep(min(int(resp.headers.get("Retry-After") or 5), 60))
             continue
         if resp.status_code == 401:
-            raise MpstatsError("MPSTATS не принял токен (401): проверьте MPSTATS_TOKEN или тариф с доступом к API")
+            value, source = token_source()
+            raise MpstatsError(
+                "MPSTATS не принял токен (401). Проверьте, что токен скопирован целиком из mpstats.io/userpanel "
+                "(блок «API токен»; он меняется после смены пароля) и что тариф включает доступ к API. "
+                f"Сейчас {describe(value, source)}. Ответ MPSTATS: {resp.text[:200]}"
+            )
         raise MpstatsError(f"MPSTATS ответил {resp.status_code} на {path}: {resp.text[:300]}")
     raise MpstatsError(f"MPSTATS не отдал данные по {path} после нескольких попыток")
 
@@ -151,10 +234,14 @@ def print_report(rows: list[dict[str, Any]]) -> None:
     for r in rows:
         print(f"\nАртикул {r['sku']}  {r['name']}")
         print(f"  Период: {r['period']} ({r['days']} дн.)")
-        print(f"  Продажи: {r['sales']} шт. (первая половина {r['sales_first_half']}, "
-              f"вторая {r['sales_second_half']}), выручка ≈ {fmt(float(r['revenue']))} ₽")
-        print(f"  Цена покупателя: было {fmt(r['price_first'])}, сейчас {fmt(r['price_last'])}, "
-              f"мин {fmt(r['price_min'])}, макс {fmt(r['price_max'])}, средняя {fmt(r['price_avg'])} ₽")
+        print(
+            f"  Продажи: {r['sales']} шт. (первая половина {r['sales_first_half']}, "
+            f"вторая {r['sales_second_half']}), выручка ≈ {fmt(float(r['revenue']))} ₽"
+        )
+        print(
+            f"  Цена покупателя: было {fmt(r['price_first'])}, сейчас {fmt(r['price_last'])}, "
+            f"мин {fmt(r['price_min'])}, макс {fmt(r['price_max'])}, средняя {fmt(r['price_avg'])} ₽"
+        )
         print(f"  Цена до скидки сейчас: {fmt(r['base_price_last'])} ₽")
         print(f"  Остаток сейчас: {fmt(r['balance_last'])} шт., дней без остатка: {r['days_out_of_stock']}")
         if not r["days"]:
