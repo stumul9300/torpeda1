@@ -64,14 +64,19 @@ const flatten = (r) => ({
   calc_seller_price: num(r.calc?.seller_price),
   site_price: num(r.site_price),
   // во сколько раз цена на сайте отличается от цены продавца: СПП и всё, что WB добавляет сам
-  site_k: r.site_price && r.current?.seller_price ? num(r.site_price) / num(r.current.seller_price) : null,
+  site_k: r.site_price && r.current?.seller_price ? num(r.site_price) / num(r.current.seller_price) : r.spp != null ? (100 - num(r.spp)) / 100 : null,
   target_site_price:
-    r.site_price && r.current?.seller_price && r.calc?.seller_price
-      ? Math.round((num(r.calc.seller_price) * num(r.site_price)) / num(r.current.seller_price))
+    r.calc?.seller_price && (r.site_price && r.current?.seller_price ? true : r.spp != null)
+      ? Math.round(num(r.calc.seller_price) * (r.site_price && r.current?.seller_price ? num(r.site_price) / num(r.current.seller_price) : (100 - num(r.spp)) / 100))
       : null,
   calc_profit: num(r.calc?.profit),
   calc_margin: num(r.calc?.margin_pct),
   calc_roi: num(r.calc?.roi_pct),
+  // что изменится относительно нынешней цены: цена продавца (₽, %) и маржа (₽, п.п.)
+  d_price: r.calc && r.current ? Math.round((num(r.calc.seller_price) - num(r.current.seller_price)) * 100) / 100 : null,
+  d_price_pct: r.calc && r.current && num(r.current.seller_price) ? Math.round(((num(r.calc.seller_price) / num(r.current.seller_price)) - 1) * 10000) / 100 : null,
+  d_profit: r.calc && r.current ? Math.round((num(r.calc.profit) - num(r.current.profit)) * 100) / 100 : null,
+  d_margin: r.calc && r.current ? Math.round((num(r.calc.margin_pct) - num(r.current.margin_pct)) * 100) / 100 : null,
   promo_best_name: r.promo_best?.name ?? null,
   promo_best_price: num(r.promo_best?.price),
   promo_best_discount: num(r.promo_best?.discount_pct),
@@ -174,13 +179,17 @@ const productColumns = [
   {
     headerName: "Новая цена (расчёт)",
     children: [
-      { headerName: "Желаемая цена на сайте", field: "target_site_price", width: 130, valueFormatter: rub, ...editable, cellClass: "cell-edit cell-target", headerTooltip: "Введите цену, которую хотите видеть на сайте: программа подберёт цену до скидки" },
-      { headerName: "Новая цена до скидки", field: "calc_price", width: 130, valueFormatter: rub, ...editable },
+      { headerName: "Желаемая цена на сайте", field: "target_site_price", width: 130, valueFormatter: rub, ...editable, cellClass: "cell-edit cell-target", headerTooltip: "Введите цену, которую хотите видеть на сайте (как «Цена с СПП»): программа подберёт цену до скидки и покажет, на сколько изменятся цена и маржа" },
+      { headerName: "Новая цена до скидки", field: "calc_price", width: 130, valueFormatter: rub, ...editable, headerTooltip: "Цена до скидки, а не цена на сайте. Чтобы ввести цену, которую увидит покупатель, пользуйтесь «Желаемой ценой на сайте»" },
       { headerName: "Новая скидка", field: "calc_discount_pct", width: 100, valueFormatter: pct, ...editable },
       { headerName: "Цена продавца", field: "calc_seller_price", width: 110, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Маржа, ₽", field: "calc_profit", width: 100, valueFormatter: rub, cellClass: signClass, type: "numericColumn" },
       { headerName: "Маржа, %", field: "calc_margin", width: 90, valueFormatter: pct, cellClass: signClass, type: "numericColumn" },
       { headerName: "ROI", field: "calc_roi", width: 90, valueFormatter: pct, type: "numericColumn" },
+      { headerName: "Изменение цены продавца, ₽", field: "d_price", width: 120, valueFormatter: rub, cellClass: signClass, type: "numericColumn", headerTooltip: "Минус: цена продавца понижается. Сравнивается новая цена продавца с нынешней" },
+      { headerName: "Изменение цены продавца, %", field: "d_price_pct", width: 120, valueFormatter: pct, cellClass: signClass, type: "numericColumn" },
+      { headerName: "Изменение маржи, ₽", field: "d_profit", width: 110, valueFormatter: rub, cellClass: signClass, type: "numericColumn", headerTooltip: "Новая маржа в рублях минус нынешняя" },
+      { headerName: "Изменение маржи, п.п.", field: "d_margin", width: 110, valueFormatter: pct, cellClass: signClass, type: "numericColumn", headerTooltip: "Новая маржа в % минус нынешняя, в процентных пунктах" },
     ],
   },
   {
@@ -216,7 +225,7 @@ const COLUMN_BLOCKS = [
   { id: "sold", label: "Продано за период", cols: ["sold_net_qty"], show: true, pin: false },
   { id: "cost", label: "Себестоимость", cols: ["cost"], show: true, pin: false },
   { id: "now", label: "Цены и маржа сейчас в WB", cols: ["price", "discount_pct", "cur_seller_price", "spp", "site_price", "buyer_price", "cur_commission", "cur_logistics", "cur_tax", "cur_profit", "cur_margin", "cur_roi"], show: true, pin: false },
-  { id: "new", label: "Новая цена (расчёт)", cols: ["target_site_price", "calc_price", "calc_discount_pct", "calc_seller_price", "calc_profit", "calc_margin", "calc_roi"], show: true, pin: false },
+  { id: "new", label: "Новая цена (расчёт)", cols: ["target_site_price", "calc_price", "calc_discount_pct", "calc_seller_price", "calc_profit", "calc_margin", "calc_roi", "d_price", "d_price_pct", "d_profit", "d_margin"], show: true, pin: false },
   { id: "promo", label: "Акции: текущая и выгодная", cols: ["promo_current", "promo_best_name", "promo_advice", "promo_delta", "promo_best_price", "promo_best_discount", "promo_best_profit", "promo_best_margin", "promo_best_roi"], show: true, pin: false },
   { id: "missing", label: "Не хватает данных", cols: ["missing_text"], show: true, pin: false },
 ];
@@ -287,9 +296,11 @@ async function saveCell(e) {
       if (value === null) {
         await api("PUT", `/api/products/${nm}/calc-price`, { price: null, discount_pct: null });
       } else {
-        if (!e.data.site_k) throw new Error("Сначала нажмите «Обновить цены на сайте»: без нынешней цены на сайте пересчитать нельзя.");
+        // разница между ценой продавца и ценой для покупателя: по цене на сайте, а если её нет, по СПП
+        const k = e.data.site_k;
+        if (!k) throw new Error("Нет ни цены на сайте, ни СПП: нажмите «Обновить цены на сайте» или «Обновить СПП».");
         const disc = e.data.calc_discount_pct ?? e.data.discount_pct ?? 0;
-        const price = Math.round(value / e.data.site_k / (1 - disc / 100));
+        const price = Math.round(value / k / (1 - disc / 100));
         await api("PUT", `/api/products/${nm}/calc-price`, { price, discount_pct: e.data.calc_discount_pct });
       }
     } else {
