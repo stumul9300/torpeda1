@@ -45,9 +45,30 @@ def latest_commit() -> str:
     return sha
 
 
+def latest_build() -> str | None:
+    """Номер сборки на GitHub для подписи кнопки. Не получилось узнать: None, обновление это не блокирует."""
+    try:
+        resp = httpx.get(
+            f"https://raw.githubusercontent.com/{REPO}/main/backend/torpeda/__init__.py",
+            headers={"User-Agent": "torpeda-update"},
+            timeout=8,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError:
+        return None
+    m = re.search(r"сборка (\d+)", resp.text)
+    return m.group(1) if m else None
+
+
 def check() -> dict:
     installed, latest = installed_commit(), latest_commit()
-    return {"installed": installed or None, "latest": latest, "available": installed != latest}
+    available = installed != latest
+    return {
+        "installed": installed or None,
+        "latest": latest,
+        "available": available,
+        "build": latest_build() if available else None,
+    }
 
 
 def restart() -> None:

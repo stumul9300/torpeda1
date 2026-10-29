@@ -53,7 +53,9 @@ def test_update_check(api, monkeypatch):
     sha = "a" * 40
     monkeypatch.setattr(updater, "latest_commit", lambda: sha)
     monkeypatch.setattr(updater, "installed_commit", lambda: "b" * 40)
-    assert api.get("/api/update/check").json() == {"installed": "b" * 40, "latest": sha, "available": True}
+    monkeypatch.setattr(updater, "latest_build", lambda: "47")
+    got = api.get("/api/update/check").json()
+    assert got == {"installed": "b" * 40, "latest": sha, "available": True, "build": "47"}
     monkeypatch.setattr(updater, "installed_commit", lambda: sha)
     assert api.get("/api/update/check").json()["available"] is False
 

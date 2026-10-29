@@ -1247,7 +1247,7 @@ const btnUpdate = document.getElementById("btn-update");
 api("GET", "/api/update/check")
   .then((u) => {
     if (u.available) {
-      btnUpdate.textContent = "Есть новая версия: обновить";
+      btnUpdate.textContent = u.build ? `Доступна сборка ${u.build}: обновить` : "Есть новая версия: обновить";
       btnUpdate.classList.add("primary");
     }
   })
@@ -1293,7 +1293,8 @@ btnUpdate.addEventListener("click", async () => {
     if (restarting && isNetworkError(err)) {
       // программа закрылась раньше, чем успела ответить: так и задумано, ждём запуска
     } else if (isNetworkError(err)) {
-      alert("Нет связи с программой. Если чёрное окно «Торпеда» закрыто, запустите start.bat.");
+      offlineBar.hidden = false;
+      wasOffline = true;
       return;
     } else {
       alert(err.message);
@@ -1304,6 +1305,20 @@ btnUpdate.addEventListener("click", async () => {
   }
   if (restarting) waitForRestart();
 });
+
+// Если программа остановилась (закрыто чёрное окно, перезагрузка), страница об этом говорит и сама оживает
+const offlineBar = document.getElementById("offline-bar");
+let wasOffline = false;
+setInterval(async () => {
+  try {
+    await api("GET", "/api/info");
+    if (wasOffline) location.reload();
+  } catch (err) {
+    if (!isNetworkError(err)) return;
+    wasOffline = true;
+    offlineBar.hidden = false;
+  }
+}, 10000);
 
 // --- что пошло не так ---
 
