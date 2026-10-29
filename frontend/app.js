@@ -110,6 +110,9 @@ function clientPrices(r) {
   };
 }
 
+// не в акции, но цена уже не выше порога акции: можно вступать без снижения
+const canJoin = (r) => !!r.promo_best && !r.promo_best.in_action && !r.promo_current && r.promo_best.delta_seller != null && num(r.promo_best.delta_seller) >= 0;
+
 const flatten = (r) => ({
   ...r,
   cost: num(r.cost),
@@ -239,9 +242,9 @@ const productColumns = [
         field: "promo_best_name",
         width: 230,
         valueFormatter: (p) => (p.data?.promo_current ? `В акции: ${p.data.promo_current}` : p.value == null ? "" : `Не в акции. Лучшая: ${p.value}`),
-        tooltipValueGetter: (p) => (p.data?.promo_current ? `Сейчас участвует в акции «${p.data.promo_current}»` : p.value == null ? "" : `Сейчас не участвует. Самая выгодная из доступных: «${p.value}»`),
-        cellClass: (p) => (p.data?.promo_current ? "cell-in-promo" : ""),
-        headerTooltip: "«В акции» — товар уже участвует (строка сиреневая). «Не в акции. Лучшая» — самая выгодная акция, в которую можно вступить",
+        tooltipValueGetter: (p) => (p.data?.promo_current ? `Сейчас участвует в акции «${p.data.promo_current}»` : p.value == null ? "" : `Сейчас не участвует. Самая выгодная из доступных: «${p.value}»` + (canJoin(p.data) ? `. Порог акции для клиента ${p.data.client_promo} ₽, у вас ${p.data.client_now} ₽: цена уже подходит, вступайте без снижения` : "")),
+        cellClass: (p) => (p.data?.promo_current ? "cell-in-promo" : canJoin(p.data) ? "cell-can-join" : ""),
+        headerTooltip: "«В акции» — товар уже участвует (строка сиреневая). «Не в акции. Лучшая» — самая выгодная акция, в которую можно вступить; светло-оранжевая строка: цена уже подходит, вступайте без снижения",
       },
       { headerName: "Желаемая цена на сайте", field: "target_site_price", width: 130, valueFormatter: rub, ...editable, cellClass: "cell-edit cell-target", headerTooltip: "Введите цену, которую хотите видеть на сайте (как «Цена с СПП»). Программа сама подберёт скидку и покажет, на сколько изменятся цена и маржа" },
     ],
@@ -346,6 +349,7 @@ const productsGrid = agGrid.createGrid(document.getElementById("grid-products"),
   rowSelection: "single",
   rowClassRules: {
     "row-promo": (p) => !!p.data?.promo_current,
+    "row-can-join": (p) => canJoin(p.data),
     "row-loss": (p) => p.data?.status === "loss",
     "row-risk": (p) => p.data?.status === "risk",
   },

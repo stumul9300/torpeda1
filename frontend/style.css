@@ -21,6 +21,8 @@ button:disabled { opacity: .5; cursor: default; }
 .grid-small { height: 50vh; width: 100%; }
 .row-promo { background: #efe6fb !important; } /* в акции: светло-сиреневая; убыток и зона риска ниже важнее */
 .ag-theme-quartz .ag-cell.cell-in-promo { background: #e2d2f7 !important; font-weight: 600; }
+.row-can-join { background: #ffeed9 !important; } /* не в акции, но цена уже подходит */
+.ag-theme-quartz .ag-cell.cell-can-join { background: #ffd9a8 !important; font-weight: 600; }
 .row-loss { background: #fdecea !important; }
 .row-risk { background: #fff8e1 !important; }
 /* выбранная строка заметна и поверх красной/жёлтой подсветки */
