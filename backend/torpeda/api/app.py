@@ -708,6 +708,7 @@ class ChangeModel(BaseModel):
 class PreviewRequest(BaseModel):
     nm_ids: list[int] | None = None  # None — все товары с расчётной ценой
     revert_change_ids: list[int] | None = None  # вернуть цены до этих отправок
+    promo_nm_ids: list[int] | None = None  # цена самой выгодной акции для этих артикулов
     revert_alert_ids: list[int] | None = None  # вернуть цены до этих изменений WB (автоакции)
 
 
@@ -718,7 +719,9 @@ class SendRequest(BaseModel):
 
 @app.post("/api/prices/preview")
 def prices_preview(req: PreviewRequest, s: Session = Depends(get_session)) -> dict:
-    if req.revert_alert_ids:
+    if req.promo_nm_ids:
+        changes = pricing.changes_from_promo(s, req.promo_nm_ids)
+    elif req.revert_alert_ids:
         changes = autopromo.changes_for_alerts(s, req.revert_alert_ids)
     elif req.revert_change_ids:
         changes = pricing.changes_for_revert(s, req.revert_change_ids)

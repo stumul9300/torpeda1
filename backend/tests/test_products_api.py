@@ -150,14 +150,46 @@ def test_best_promo_is_highest_price_without_loss(synced, factory):
     synced.put("/api/products/418020031/cost", json={"cost": "700"})
     _promo_now(factory)
     with factory() as s:
-        s.add(Promotion(account_id=1, id=2002, name="Дорогая", type="regular", start_at=datetime.now(),
-                        end_at=datetime.now() + timedelta(days=3)))
-        s.add(PromotionItem(account_id=1, promotion_id=2002, nm_id=418020031, in_action=False,
-                            plan_price=Decimal(5300), plan_discount_pct=Decimal(40)))
-        s.add(Promotion(account_id=1, id=2003, name="Дешёвая", type="regular", start_at=datetime.now(),
-                        end_at=datetime.now() + timedelta(days=3)))
-        s.add(PromotionItem(account_id=1, promotion_id=2003, nm_id=418020031, in_action=False,
-                            plan_price=Decimal(5200), plan_discount_pct=Decimal(40)))
+        s.add(
+            Promotion(
+                account_id=1,
+                id=2002,
+                name="Дорогая",
+                type="regular",
+                start_at=datetime.now(),
+                end_at=datetime.now() + timedelta(days=3),
+            )
+        )
+        s.add(
+            PromotionItem(
+                account_id=1,
+                promotion_id=2002,
+                nm_id=418020031,
+                in_action=False,
+                plan_price=Decimal(5300),
+                plan_discount_pct=Decimal(40),
+            )
+        )
+        s.add(
+            Promotion(
+                account_id=1,
+                id=2003,
+                name="Дешёвая",
+                type="regular",
+                start_at=datetime.now(),
+                end_at=datetime.now() + timedelta(days=3),
+            )
+        )
+        s.add(
+            PromotionItem(
+                account_id=1,
+                promotion_id=2003,
+                nm_id=418020031,
+                in_action=False,
+                plan_price=Decimal(5200),
+                plan_discount_pct=Decimal(40),
+            )
+        )
         s.commit()
     r = row(synced)
     assert r["promo_best"]["name"] == "Дорогая"  # 11.11 убыточная и не выбирается
@@ -273,3 +305,18 @@ def test_invalid_discount_rejected(synced):
 
 def _change(item):
     return {k: item[k] for k in ("nm_id", "old_price", "old_discount", "new_price", "new_discount")}
+
+
+def test_send_best_promo_price(synced, factory, fake_wb):
+    synced.put("/api/products/418020031/cost", json={"cost": "700"})
+    _promo_now(factory)
+    prev = synced.post("/api/prices/preview", json={"promo_nm_ids": [418020031]}).json()
+    item = prev["items"][0]
+    assert item["old_price"] == 5123 and item["new_price"] == 5123 and item["new_discount"] > item["old_discount"]
+    res = synced.post(
+        "/api/prices/send", json={"items": [_change(item)], "confirm_token": prev["confirm_token"]}
+    ).json()
+    assert res["status"] == "sent"
+    assert (
+        synced.post("/api/prices/preview", json={"promo_nm_ids": [418020031]}).json()["items"] == []
+    )

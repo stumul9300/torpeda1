@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 from torpeda.calc import calculate
 from torpeda.db import DEFAULT_ACCOUNT_ID
 from torpeda.db.models import Price, PriceChange, Product
-from torpeda.services import _result_dict, load_context, unit_input
+from torpeda.services import _result_dict, load_context, promo_options, unit_input
 from torpeda.wb_api.client import WBClient, WBError
 
 ACC = DEFAULT_ACCOUNT_ID
@@ -74,6 +75,24 @@ def changes_from_calc_prices(s: Session, nm_ids: list[int] | None = None) -> lis
     for p in s.scalars(q):
         new_discount = p.calc_discount_pct if p.calc_discount_pct is not None else p.discount_pct
         c = Change(p.nm_id, _int(p.price), _int(p.discount_pct), _int(p.calc_price), _int(new_discount))
+        if (c.old_price, c.old_discount) != (c.new_price, c.new_discount):
+            changes.append(c)
+    return changes
+
+
+def changes_from_promo(s: Session, nm_ids: list[int]) -> list[Change]:
+    """Цена и скидка самой выгодной акции для выбранных артикулов (если в акцию ещё не вступили)."""
+    ctx = load_context(s)
+    products = {p.nm_id: p for p in s.scalars(select(Product).where(Product.account_id == ACC))}
+    prices = {p.nm_id: p for p in s.scalars(select(Price).where(Price.account_id == ACC))}
+    options = promo_options(s, ctx, products, datetime.now(), prices)
+    changes = []
+    for nm in nm_ids:
+        best = options.get(nm, {}).get("best")
+        cur = prices.get(nm)
+        if cur is None or best is None or best["in_action"] or best["price"] is None or best["discount_pct"] is None:
+            continue
+        c = Change(nm, _int(cur.price), _int(cur.discount_pct), _int(best["price"]), _int(best["discount_pct"]))
         if (c.old_price, c.old_discount) != (c.new_price, c.new_discount):
             changes.append(c)
     return changes
