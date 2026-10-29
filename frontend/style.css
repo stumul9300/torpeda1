@@ -22,9 +22,7 @@ button:disabled { opacity: .5; cursor: default; }
 .row-loss { background: #fdecea !important; }
 .row-risk { background: #fff8e1 !important; }
 .hl-promo .row-promo { background: #efe6fb !important; } /* в акции: светло-сиреневая; главнее розовой и жёлтой, кроме выбранной строки */
-.hl-promo .ag-theme-quartz .ag-cell.cell-in-promo { background: #e2d2f7 !important; font-weight: 600; }
 .hl-promo .row-can-join { background: #efe6fb !important; } /* не в акции, но цена уже подходит: тоже сиреневая */
-.hl-promo .ag-theme-quartz .ag-cell.cell-can-join { background: #e2d2f7 !important; font-weight: 600; }
 /* выбранная строка заметна и поверх красной/жёлтой подсветки */
 .ag-theme-quartz .ag-row.ag-row-selected, .ag-theme-quartz .ag-row.ag-row-selected .ag-cell { background: #cfe3ff !important; }
 .ag-theme-quartz .ag-row.ag-row-selected { box-shadow: inset 4px 0 0 #1a73e8; }
