@@ -521,7 +521,18 @@ document.getElementById("calc-close").addEventListener("click", () => { document
 
 // --- «Новая цена» по акциям ---
 
+const hlPromo = document.getElementById("hl-promo");
+const applyHl = () => document.body.classList.toggle("hl-promo", hlPromo.checked);
+try { hlPromo.checked = localStorage.getItem("torpeda.hlPromo") !== "0"; } catch { /* без запоминания подсветка включена */ }
+applyHl();
+hlPromo.addEventListener("change", () => {
+  applyHl();
+  try { localStorage.setItem("torpeda.hlPromo", hlPromo.checked ? "1" : "0"); } catch { /* не страшно */ }
+});
+
 document.getElementById("btn-recalc-promos").addEventListener("click", async (e) => {
+  hlPromo.checked = true;
+  hlPromo.dispatchEvent(new Event("change"));
   if (!confirm("Заполнить колонку «Новая цена» по самым выгодным акциям? Убыточные акции и товары без себестоимости пропускаются. В WB ничего не отправляется.")) return;
   e.target.disabled = true;
   try {
