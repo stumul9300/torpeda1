@@ -21,7 +21,7 @@ def test_import_feeds_best_promo(api):
     resp = api.post("/api/promotions/import", files=[("files", (NAME, data)), ("files", ("bad.xlsx", b"x"))])
     body = resp.json()
     assert body["promotions"] == 1 and body["items"] == 2
-    assert "error" in body["files"][1]
+    assert any("error" in f for f in body["files"])
 
     rows = api.get("/api/promotions-best").json()
     assert [r["nm_id"] for r in rows] == [418020031]
@@ -45,3 +45,14 @@ def test_api_plan_price_is_price_after_discount():
     assert _plan_before_discount({"price": 5130, "planPrice": 2765}) == (Decimal(5130), Decimal(47))
     assert _plan_before_discount({"planPrice": 2765, "planDiscount": 47}) == (Decimal(5217), Decimal(47))
     assert _plan_before_discount({"price": 5130}) == (None, None)
+
+
+def test_same_name_twice_stay_separate_promotions(api):
+    a = xlsx(HEAD, ("Нет", 418020031, 900, 3000, "71"))
+    b = xlsx(HEAD, ("Нет", 418020031, 800, 3000, "74"))
+    name = "Все товары подходящие для акции_Осенние скидки автоматические скидки_29.10.2026 %s.xlsx"
+    body = api.post(
+        "/api/promotions/import", files=[("files", (name % "11.05.11", b)), ("files", (name % "11.04.04", a))]
+    ).json()
+    assert body["promotions"] == 2
+    assert [f["promotion"] for f in body["files"]] == ["Осенние скидки", "Осенние скидки (2)"]

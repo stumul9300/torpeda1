@@ -375,12 +375,13 @@ const promoDialog = document.getElementById("promo-dialog");
 document.getElementById("btn-promo-list").addEventListener("click", async () => {
   const list = await api("GET", "/api/promotions");
   const noList = list.filter((p) => !p.items_total).length;
+  const fromFiles = list.filter((p) => p.from_file).length;
   document.getElementById("promo-hint").textContent = list.length
-    ? `Загружено акций: ${list.length}. По ${noList} из них WB не отдаёт список товаров (в основном автоакции), поэтому цену для вступления программа посчитать не может. По остальным WB показывает только товары, приглашённые в акцию.`
+    ? `Загружено акций: ${list.length}, из них из файлов: ${fromFiles}${fromFiles ? "" : " (файлы акций ещё не загружены: кнопка «Загрузить акции из файлов…»)"}. По ${noList} из них WB не отдаёт список товаров (в основном автоакции), поэтому цену для вступления программа посчитать не может. По остальным WB показывает только товары, приглашённые в акцию.`
     : "Акции ещё не загружены: нажмите синхронизацию в «Настройках».";
   const dt = (v) => (v ? new Date(v).toLocaleDateString("ru-RU") : "—");
   document.getElementById("promo-body").innerHTML = list.map((p) => `<tr>
-    <td>${esc(p.name)}</td><td>${p.type === "auto" ? "авто" : esc(p.type || "обычная")}</td>
+    <td>${esc(p.name)}${p.from_file ? " (файл)" : ""}</td><td>${p.type === "auto" ? "авто" : esc(p.type || "обычная")}</td>
     <td>${dt(p.start_at)} — ${dt(p.end_at)}</td>
     <td>${p.items_total || "WB не отдаёт список"}</td><td>${p.items_total ? p.items_in_action : "—"}</td></tr>`).join("");
   promoDialog.showModal();
@@ -686,24 +687,51 @@ async function loadPromotion(id) {
 promoSelect.addEventListener("change", () => loadPromotion(promoSelect.value));
 
 const promoFiles = document.getElementById("promo-files");
-document.getElementById("btn-promo-upload").addEventListener("click", () => promoFiles.click());
-promoFiles.addEventListener("change", async () => {
+for (const id of ["btn-promo-upload", "btn-promo-upload-2"]) document.getElementById(id).addEventListener("click", () => promoFiles.click());
+
+const promoResult = document.getElementById("promo-result-dialog");
+document.getElementById("promo-result-close").addEventListener("click", () => promoResult.close());
+function showPromoResult(html) {
+  document.getElementById("promo-result-body").innerHTML = html;
+  promoResult.showModal();
+}
+
+async function uploadPromoFiles(files) {
+  const xlsx = [...files].filter((f) => /\.xlsx$/i.test(f.name));
+  if (!xlsx.length) {
+    showPromoResult("<p>Нужны файлы Excel (.xlsx) из кабинета WB.</p>");
+    return;
+  }
   const form = new FormData();
-  for (const f of promoFiles.files) form.append("files", f);
-  promoFiles.value = "";
+  for (const f of xlsx) form.append("files", f);
   try {
     const res = await fetch("/api/promotions/import", { method: "POST", body: form });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
     const data = await res.json();
     const bad = data.files.filter((f) => f.error);
-    alert(`Загружено акций: ${data.promotions}, строк товаров: ${data.items}.` +
-      (bad.length ? `\n\nНе загрузились:\n${bad.map((f) => `${f.file}: ${f.error}`).join("\n")}` : "") +
-      "\n\nНажмите «Пересчитать цены по акциям» на вкладке «Товары», чтобы подставить цены в «Новую цену».");
+    showPromoResult(
+      `<p class="big">Загружено акций: ${data.promotions}, строк товаров: ${data.items}</p>` +
+        (bad.length ? `<p>Не загрузились:</p><ul>${bad.map((f) => `<li>${esc(f.file)}: ${esc(f.error)}</li>`).join("")}</ul>` : "") +
+        "<p>Теперь на вкладке «Товары» нажмите «Пересчитать цены по акциям»: цены для вступления попадут в «Новую цену».</p>"
+    );
     await loadPromotions();
     await loadProducts();
   } catch (e) {
-    alert("Не получилось загрузить акции: " + e.message);
+    showPromoResult("<p>Не получилось загрузить акции: " + esc(e.message) + "</p>");
   }
+}
+promoFiles.addEventListener("change", () => {
+  const files = [...promoFiles.files];
+  promoFiles.value = "";
+  uploadPromoFiles(files);
+});
+
+// файлы можно просто бросить мышью в окно программы
+window.addEventListener("dragover", (e) => { if (e.dataTransfer?.types?.includes("Files")) e.preventDefault(); });
+window.addEventListener("drop", (e) => {
+  if (!e.dataTransfer?.files?.length) return;
+  e.preventDefault();
+  uploadPromoFiles(e.dataTransfer.files);
 });
 
 // --- отчёты ---

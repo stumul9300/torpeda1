@@ -94,24 +94,35 @@ def parse(content: bytes) -> list[dict]:
 
 
 def import_files(s: Session, files: list[tuple[str, bytes]]) -> dict:
-    """Загружает файлы акций. Возвращает итог по каждому файлу."""
+    """Загружает файлы акций. Возвращает итог по каждому файлу.
+
+    Файлы идут в порядке имён (в них время выгрузки), поэтому результат не зависит от порядка выбора.
+    Одинаково названные акции (в кабинете бывают две «Осенние скидки») не склеиваются: если у второго файла те же
+    товары, что у первого, он становится отдельной акцией «название (2)»."""
     cleared: set[int] = set()
+    seen: dict[int, set[int]] = {}
     report = []
-    for filename, content in files:
+    for filename, content in sorted(files):
         name, kind = promo_name(filename)
         try:
             items = parse(content)
         except ValueError as e:
             report.append({"file": filename, "error": str(e)})
             continue
-        pid = promo_id(name)
-        s.merge(Promotion(account_id=ACC, id=pid, name=name, type=kind, start_at=None, end_at=None))
+        nms = {it["nm_id"] for it in items}
+        title, n = name, 1
+        while promo_id(title) in seen and seen[promo_id(title)] & nms:
+            n += 1
+            title = f"{name} ({n})"
+        pid = promo_id(title)
+        s.merge(Promotion(account_id=ACC, id=pid, name=title, type=kind, start_at=None, end_at=None))
         if pid not in cleared:  # повторная загрузка заменяет данные акции, файлы одной загрузки складываются
             s.execute(delete(PromotionItem).where(PromotionItem.account_id == ACC, PromotionItem.promotion_id == pid))
             cleared.add(pid)
+        seen.setdefault(pid, set()).update(nms)
         for it in items:
             s.merge(PromotionItem(account_id=ACC, promotion_id=pid, **it))
-        report.append({"file": filename, "promotion": name, "type": kind, "items": len(items)})
+        report.append({"file": filename, "promotion": title, "type": kind, "items": len(items)})
     s.commit()
     return {"files": report, "promotions": len(cleared), "items": sum(r.get("items", 0) for r in report)}
 
