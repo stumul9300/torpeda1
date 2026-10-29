@@ -148,7 +148,7 @@
       <button type="button" id="btn-promo-upload" title="Выгрузки акций из кабинета WB (xlsx), можно сразу много файлов">Загрузить акции из файлов…</button>
       <input type="file" id="promo-files" accept=".xlsx" multiple hidden>
     </div>
-    <p class="hint">Кабинет WB → Календарь акций → акция → «Настроить список товаров» → скачать Excel. Выберите все файлы сразу. Акции из файлов используются во всех расчётах и важнее одноимённых акций из WB. Повторная загрузка заменяет прежние данные акции.</p>
+    <p class="hint">Можно просто бросить файлы мышью в окно программы. Кабинет WB → Календарь акций → акция → «Настроить список товаров» → скачать Excel. Выберите все файлы сразу. Акции из файлов используются во всех расчётах и важнее одноимённых акций из WB. Повторная загрузка заменяет прежние данные акции.</p>
     <div id="grid-promo" class="ag-theme-quartz grid"></div>
   </section>
 
@@ -243,6 +243,12 @@
       <button type="submit" class="primary">Сохранить</button>
     </form>
   </section>
+
+  <dialog id="promo-result-dialog">
+    <h3>Акции из файлов</h3>
+    <div id="promo-result-body"></div>
+    <div class="dialog-actions"><button type="button" id="promo-result-close" class="primary">Понятно</button></div>
+  </dialog>
 
   <dialog id="promo-dialog">
     <h3>Акции WB</h3>

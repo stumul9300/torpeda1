@@ -83,3 +83,5 @@ h1 small { font-size: 13px; font-weight: 400; color: #555; margin-left: 8px; }
 .top-scroll { overflow-x: auto; overflow-y: hidden; height: 16px; width: 100%; }
 .top-scroll > div { height: 1px; }
 .grid-wrap { flex: 1; min-width: 0; width: 100%; }
+#promo-result-dialog { width: min(560px, 95vw); }
+#promo-result-dialog .big { font-size: 20px; font-weight: 600; }
