@@ -1,0 +1,10 @@
+{
+  "name": "torpeda-cloudflare",
+  "private": true,
+  "dependencies": {
+    "@cloudflare/containers": "^0.0.30"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
