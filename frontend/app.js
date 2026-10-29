@@ -100,6 +100,8 @@ function clientPrices(r) {
       : null;
   return {
     promo_advice_client: advice,
+    client_profit: promo != null ? num(best.profit) : null,
+    client_margin: promo != null ? num(best.margin_pct) : null,
     client_now: now,
     client_promo: promo,
     client_diff: diff,
@@ -219,7 +221,7 @@ const productColumns = [
   { headerName: "Название", field: "title", width: 200 },
   { headerName: "Бренд", field: "brand", width: 110 },
   { headerName: "Предмет", field: "subject", width: 120 },
-  { headerName: "Ост. FBO", field: "stock_fbo", width: 90, type: "numericColumn" },
+  { headerName: "Ост. FBO", field: "stock_fbo", width: 90, type: "numericColumn", sort: "desc" },
   { headerName: "Ост. FBS", field: "stock_fbs", width: 90, type: "numericColumn" },
   { headerName: "Продано за период", field: "sold_net_qty", width: 110, type: "numericColumn" },
   { headerName: "Себест.", field: "cost", width: 100, valueFormatter: rub, ...editable },
@@ -228,6 +230,8 @@ const productColumns = [
     children: [
       { headerName: "Цена для клиента сейчас", field: "client_now", width: 120, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn", headerTooltip: "Цена на сайте для покупателя (с СПП). Если цены на сайте нет, считается по СПП" },
       { headerName: "Рекомендуемая цена для клиента (акция)", field: "client_promo", width: 150, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn", cellClass: (p) => (p.value != null && p.data.client_diff < 0 ? "cell-promo" : ""), headerTooltip: "Какая будет цена для покупателя, если вступить в самую выгодную акцию. Двойной щелчок отправляет эту цену в WB (скидка подберётся сама)" },
+      { headerName: "Маржа по этой цене, ₽", field: "client_profit", width: 110, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), cellClass: signClass, type: "numericColumn", headerTooltip: "Маржа в рублях, если поставить рекомендуемую цену" },
+      { headerName: "Маржа по этой цене, %", field: "client_margin", width: 110, valueFormatter: (p) => (p.value == null ? "—" : pct(p)), cellClass: signClass, type: "numericColumn" },
       { headerName: "Разница, ₽", field: "client_diff", width: 100, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), cellClass: signClass, type: "numericColumn", headerTooltip: "Минус: цена для клиента понижается" },
       { headerName: "Разница, %", field: "client_diff_pct", width: 100, valueFormatter: (p) => (p.value == null ? "—" : pct(p)), cellClass: signClass, type: "numericColumn" },
       { headerName: "Акция", field: "promo_best_name", width: 150, valueFormatter: (p) => (p.value == null ? "" : p.value) },
@@ -299,7 +303,7 @@ const COLUMN_BLOCKS = [
   { id: "stocks", label: "Остатки FBO / FBS", cols: ["stock_fbo", "stock_fbs"], show: true, pin: false },
   { id: "sold", label: "Продано за период", cols: ["sold_net_qty"], show: true, pin: false },
   { id: "cost", label: "Себестоимость", cols: ["cost"], show: true, pin: false },
-  { id: "client", label: "Цена для клиента и акция", cols: ["client_now", "client_promo", "client_diff", "client_diff_pct", "promo_best_name", "target_site_price"], show: true, pin: false },
+  { id: "client", label: "Цена для клиента и акция", cols: ["client_now", "client_promo", "client_profit", "client_margin", "client_diff", "client_diff_pct", "promo_best_name", "target_site_price"], show: true, pin: false },
   { id: "prices", label: "Служебное: цена до скидки и скидка", cols: ["price", "discount_pct", "calc_price", "calc_discount_pct"], show: false, pin: false },
   { id: "now", label: "Цены и маржа сейчас в WB", cols: ["cur_seller_price", "spp", "site_price", "buyer_price", "cur_commission", "cur_logistics", "cur_tax", "cur_profit", "cur_margin", "cur_roi"], show: true, pin: false },
   { id: "new", label: "Новая цена (расчёт)", cols: ["calc_seller_price", "calc_profit", "calc_margin", "calc_roi", "d_price", "d_price_pct", "d_profit", "d_margin"], show: true, pin: false },
