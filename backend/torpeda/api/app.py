@@ -271,6 +271,12 @@ def set_calc_price(nm_id: int, req: CalcPriceRequest, s: Session = Depends(get_s
     return {"nm_id": nm_id, "calc_price": price.calc_price, "calc_discount_pct": price.calc_discount_pct}
 
 
+@app.post("/api/prices/recalc-promos")
+def recalc_prices_by_promos(s: Session = Depends(get_session)) -> dict:
+    """Заполняет «Новую цену» по самым выгодным акциям. В WB ничего не отправляется."""
+    return services.recalc_by_promos(s)
+
+
 # --- акции ---
 
 

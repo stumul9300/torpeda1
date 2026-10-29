@@ -54,14 +54,14 @@ def restart() -> None:
     """Запускает start.bat заново (он сам обновит файлы) и закрывает эту программу."""
     if os.name != "nt":
         raise UpdateError("Перезапуск кнопкой работает только на Windows: запустите программу заново вручную.")
-    bat = ROOT / "start.bat"
-    if not bat.exists():
-        raise UpdateError("Не найден start.bat рядом с программой.")
-    # пауза, чтобы эта программа успела закрыться и освободить порт 8000
+    bat = ROOT / "restart.bat"
+    if not bat.exists() or not (ROOT / "start.bat").exists():
+        raise UpdateError("Не найден start.bat или restart.bat рядом с программой. Запустите start.bat вручную.")
+    # restart.bat подождёт, пока эта программа закроется и освободит порт 8000, и запустит start.bat
     subprocess.Popen(
-        f'cmd /c "ping -n 4 127.0.0.1 >nul & start "" "{bat}""',
+        ["cmd", "/c", str(bat)],
         cwd=ROOT,
-        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
         close_fds=True,
     )
-    threading.Timer(1.0, lambda: os._exit(0)).start()
+    threading.Timer(2.0, lambda: os._exit(0)).start()
