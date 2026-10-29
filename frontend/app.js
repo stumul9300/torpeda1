@@ -273,7 +273,7 @@ const productColumns = [
   {
     headerName: "Акции",
     children: [
-      { headerName: "Текущая акция", field: "promo_current", width: 160 },
+      { headerName: "Текущая акция", field: "promo_current", width: 160, cellClass: (p) => (p.value ? "cell-in-promo" : "") },
       {
         headerName: "Выгодная акция",
         colId: "promo_best_name_full",
@@ -337,6 +337,7 @@ const productsGrid = agGrid.createGrid(document.getElementById("grid-products"),
   getRowId: (p) => String(p.data.nm_id),
   rowSelection: "single",
   rowClassRules: {
+    "row-promo": (p) => !!p.data?.promo_current,
     "row-loss": (p) => p.data?.status === "loss",
     "row-risk": (p) => p.data?.status === "risk",
   },
