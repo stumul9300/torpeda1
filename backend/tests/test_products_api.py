@@ -189,7 +189,7 @@ def test_promo_advice_lower_price(synced, factory):
     best = row(synced)["promo_best"]
     assert Decimal(best["cur_seller_price"]) == Decimal("3073.80")
     assert Decimal(best["delta_seller"]) < 0  # плановая цена 11.11 ниже нынешней
-    assert best["advice"].startswith("понизить цену продавца на")
+    assert best["advice"].startswith("поставить скидку")
     assert "убыток" in best["advice"]
     with factory() as s:  # цена акции выше нынешней: снижать не нужно
         for it in s.query(PromotionItem):

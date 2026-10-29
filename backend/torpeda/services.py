@@ -175,8 +175,9 @@ def spp_from_orders(s: Session) -> dict[int, tuple[Decimal, datetime]]:
 SPP_SOURCE = spp_from_orders
 
 
-def _promo_advice(entry: dict, cur_seller: Decimal | None, plan_seller: Decimal) -> dict:
-    """Что делать с ценой, чтобы вступить в акцию: на сколько её надо снизить и что будет с маржой."""
+def _promo_advice(entry: dict, cur: Price | None, plan_seller: Decimal) -> dict:
+    """Что делать, чтобы вступить в акцию: какую скидку поставить, на сколько это снизит цену, что будет с маржой."""
+    cur_seller = (cur.price * (1 - cur.discount_pct / 100)).quantize(Decimal("0.01")) if cur else None
     extra: dict = {"cur_seller_price": cur_seller, "plan_seller_price": plan_seller.quantize(Decimal("0.01"))}
     if entry["in_action"]:
         extra["advice"] = "уже участвует в акции"
@@ -189,12 +190,17 @@ def _promo_advice(entry: dict, cur_seller: Decimal | None, plan_seller: Decimal)
     extra["delta_pct"] = (delta / cur_seller * 100).quantize(Decimal("0.01")) if cur_seller else None
     if delta >= 0:
         extra["advice"] = "цена уже подходит: можно вступать без снижения"
-    else:
-        loss = ", убыток" if entry["status"] == "loss" else ""
-        extra["advice"] = (
-            f"понизить цену продавца на {-extra['delta_seller']:.2f} ₽ ({-extra['delta_pct']:.2f}%) "
-            f"до {extra['plan_seller_price']:.2f} ₽: маржа {entry['profit']} ₽{loss}"
-        )
+        return extra
+    loss = ", убыток" if entry["status"] == "loss" else ""
+    what = (
+        f"поставить скидку {entry['discount_pct']:.0f}% вместо {cur.discount_pct:.0f}%"
+        if entry["price"] == cur.price and entry["discount_pct"] is not None
+        else f"поставить цену до скидки {entry['price']:.0f} ₽ и скидку {(entry['discount_pct'] or 0):.0f}%"
+    )
+    extra["advice"] = (
+        f"{what}: цена продавца {extra['plan_seller_price']:.2f} ₽ "
+        f"(на {-extra['delta_seller']:.2f} ₽, {-extra['delta_pct']:.2f}% ниже), маржа {entry['profit']} ₽{loss}"
+    )
     return extra
 
 
@@ -231,9 +237,7 @@ def promo_options(
             "discount_pct": it.plan_discount_pct,
             **_result_dict(ctx, res),
         }
-        cur = (prices or {}).get(it.nm_id)
-        cur_seller = (cur.price * (1 - cur.discount_pct / 100)).quantize(Decimal("0.01")) if cur else None
-        entry.update(_promo_advice(entry, cur_seller, res.seller_price))
+        entry.update(_promo_advice(entry, (prices or {}).get(it.nm_id), res.seller_price))
         info["all"].append(entry)
         # выгодная по цене: максимальная цена продавца после скидки, убыточные акции только если других нет
         key = (not res.is_loss, res.seller_price)
