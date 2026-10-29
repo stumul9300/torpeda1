@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -28,6 +28,8 @@ from torpeda.db.models import (
     FunnelRow,
     Order,
     Price,
+    PriceAlert,
+    PriceChange,
     Product,
     Promotion,
     PromotionItem,
@@ -91,11 +93,49 @@ def sync_products(client: WBClient, s: Session) -> int:
     return n
 
 
+FOREIGN_CHANGE_GRACE = timedelta(minutes=60)  # столько WB может применять нашу отправку цен
+
+
+def _seller(price: Decimal, discount: Decimal) -> Decimal:
+    return price * (1 - discount / 100)
+
+
+def _note_foreign_change(s: Session, old: Price | None, nm_id: int, price: Decimal, discount: Decimal) -> None:
+    """Запоминает понижение цены продавца не нашей отправкой (автоакция WB). Повышения не отслеживаем."""
+    if (
+        old is None
+        or old.price == 0
+        or _seller(price, discount) >= _seller(old.price, old.discount_pct) - Decimal("0.5")
+    ):
+        return
+    last = s.scalar(
+        select(PriceChange.sent_at)
+        .where(PriceChange.account_id == ACC, PriceChange.nm_id == nm_id)
+        .order_by(PriceChange.id.desc())
+        .limit(1)
+    )
+    if last is not None and datetime.now(UTC).replace(tzinfo=None) - last < FOREIGN_CHANGE_GRACE:
+        return  # WB ещё мог не применить нашу отправку
+    s.add(
+        PriceAlert(
+            account_id=ACC,
+            nm_id=nm_id,
+            old_price=old.price,
+            old_discount_pct=old.discount_pct,
+            new_price=price,
+            new_discount_pct=discount,
+        )
+    )
+
+
 def sync_prices(client: WBClient, s: Session) -> int:
     n = 0
     for g in client.iter_prices():
         sizes = g.get("sizes") or [{}]
         existing = s.get(Price, (ACC, g["nmID"]))
+        _note_foreign_change(
+            s, existing, g["nmID"], _dec(sizes[0].get("price")) or Decimal(0), _dec(g.get("discount")) or Decimal(0)
+        )
         price = Price(
             account_id=ACC,
             nm_id=g["nmID"],

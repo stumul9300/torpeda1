@@ -651,9 +651,55 @@ const historyGrid = agGrid.createGrid(document.getElementById("grid-history"), {
   localeText: RU,
 });
 
+const ALERT_STATUS = { new: "не возвращена", reverted: "возвращена", skipped: "пропущено", error: "ошибка" };
+const alertsGrid = agGrid.createGrid(document.getElementById("grid-alerts"), {
+  columnDefs: [
+    { headerName: "Когда заметили", field: "detected_at", width: 170, valueFormatter: (p) => new Date(p.value + "Z").toLocaleString("ru-RU") },
+    { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 120 },
+    { headerName: "Было", valueGetter: (p) => `${num(p.data.old_price)} ₽ / ${num(p.data.old_discount_pct)}%`, width: 150 },
+    { headerName: "Стало (WB)", valueGetter: (p) => `${num(p.data.new_price)} ₽ / ${num(p.data.new_discount_pct)}%`, width: 150 },
+    { headerName: "Статус", valueGetter: (p) => (p.data.restored && p.data.status !== "reverted" ? "цена прежняя" : ALERT_STATUS[p.data.status] || p.data.status), width: 130 },
+    { headerName: "Примечание", field: "note", width: 280 },
+    {
+      headerName: "",
+      width: 150,
+      sortable: false,
+      filter: false,
+      cellRenderer: (p) => {
+        if (p.data.restored) return "";
+        const b = document.createElement("button");
+        b.textContent = "Вернуть прежнюю";
+        b.addEventListener("click", () => openPreview({ revert_alert_ids: [p.data.id] }));
+        return b;
+      },
+    },
+  ],
+  defaultColDef: { sortable: true, filter: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true },
+  localeText: RU,
+});
+const revertBox = document.getElementById("revert-autopromo");
+
 async function loadHistory() {
   historyGrid.setGridOption("rowData", await api("GET", "/api/prices/history"));
+  alertsGrid.setGridOption("rowData", await api("GET", "/api/price-alerts"));
+  revertBox.checked = (await api("GET", "/api/settings")).revert_autopromo === "1";
 }
+revertBox.addEventListener("change", async () => {
+  await api("PUT", "/api/settings", { revert_autopromo: revertBox.checked ? "1" : "0" });
+  if (revertBox.checked) checkPrices(true);
+});
+async function checkPrices(show) {
+  try {
+    const r = await api("POST", "/api/prices/check");
+    if (show && r.revert) alert(`Возвращено цен: ${r.revert.reverted}, пропущено: ${r.revert.skipped}` + (r.revert.error ? `\nОшибка WB: ${r.revert.error}` : ""));
+    else if (show) alert(r.new_alerts ? `Есть невозвращённые изменения цен от WB: ${r.new_alerts}` : "Цены в WB не менялись без вас");
+  } catch (err) {
+    if (show) alert(err.message);
+  }
+  loadHistory();
+}
+document.getElementById("btn-price-check").addEventListener("click", () => checkPrices(true));
+setInterval(() => checkPrices(false), 10 * 60 * 1000);
 document.getElementById("btn-history-refresh").addEventListener("click", loadHistory);
 
 // --- акции ---
