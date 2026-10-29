@@ -32,3 +32,16 @@ def test_import_feeds_best_promo(api):
     api.post("/api/promotions/import", files=[("files", (NAME, xlsx(HEAD, ("Нет", 418020031, 800, 3000, "74"))))])
     again = api.get("/api/promotions-best").json()[0]["promos"]
     assert next(p for p in again if p["name"] == "11.11_ хиты")["discount_pct"] in ("74.00", "74.000")
+
+
+def test_api_plan_price_is_price_after_discount():
+    from decimal import Decimal
+
+    from torpeda.sync import _plan_before_discount
+
+    # артикул 8602: розничная 5130, плановая цена для покупателя 2765, WB просит скидку 47%
+    item = {"price": 5130, "planPrice": 2765, "planDiscount": 47}
+    assert _plan_before_discount(item) == (Decimal(5130), Decimal(47))
+    assert _plan_before_discount({"price": 5130, "planPrice": 2765}) == (Decimal(5130), Decimal(47))
+    assert _plan_before_discount({"planPrice": 2765, "planDiscount": 47}) == (Decimal(5217), Decimal(47))
+    assert _plan_before_discount({"price": 5130}) == (None, None)

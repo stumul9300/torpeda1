@@ -209,7 +209,7 @@ class FakeWB:
                         "inAction": False,
                         "price": 5123,
                         "discount": 40,
-                        "planPrice": 5123,
+                        "planPrice": 2100,
                         "planDiscount": 60,
                     }
                 ]

@@ -172,7 +172,7 @@ def test_promo_note_explains_empty_cells(synced, factory):
     with factory() as s:  # у товара не осталось акций
         s.query(PromotionItem).delete()
         s.commit()
-    assert "не предлагает" in row(synced)["promo_note"]
+    assert "из файлов" in row(synced)["promo_note"]
     with factory() as s:  # акции не загружены совсем
         s.query(Promotion).delete()
         s.commit()
