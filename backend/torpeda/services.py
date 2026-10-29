@@ -192,14 +192,9 @@ def _promo_advice(entry: dict, cur: Price | None, plan_seller: Decimal) -> dict:
         extra["advice"] = "цена уже подходит: можно вступать без снижения"
         return extra
     loss = ", убыток" if entry["status"] == "loss" else ""
-    what = (
-        f"поставить скидку {entry['discount_pct']:.0f}% вместо {cur.discount_pct:.0f}%"
-        if entry["price"] == cur.price and entry["discount_pct"] is not None
-        else f"поставить цену до скидки {entry['price']:.0f} ₽ и скидку {(entry['discount_pct'] or 0):.0f}%"
-    )
     extra["advice"] = (
-        f"{what}: цена продавца {extra['plan_seller_price']:.2f} ₽ "
-        f"(на {-extra['delta_seller']:.2f} ₽, {-extra['delta_pct']:.2f}% ниже), маржа {entry['profit']} ₽{loss}"
+        f"понизить цену продавца до {extra['plan_seller_price']:.2f} ₽ "
+        f"(на {-extra['delta_seller']:.2f} ₽, {-extra['delta_pct']:.2f}%), маржа {entry['profit']} ₽{loss}"
     )
     return extra
 
