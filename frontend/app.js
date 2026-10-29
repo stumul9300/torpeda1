@@ -227,7 +227,7 @@ const productColumns = [
     headerName: "Цена для клиента и акция",
     children: [
       { headerName: "Цена для клиента сейчас", field: "client_now", width: 120, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn", headerTooltip: "Цена на сайте для покупателя (с СПП). Если цены на сайте нет, считается по СПП" },
-      { headerName: "Рекомендуемая цена для клиента (акция)", field: "client_promo", width: 150, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn", cellClass: (p) => (p.value != null && p.data.client_diff < 0 ? "cell-promo" : ""), headerTooltip: "Какая будет цена для покупателя, если вступить в самую выгодную акцию. Цена для клиента после вступления в акцию" },
+      { headerName: "Рекомендуемая цена для клиента (акция)", field: "client_promo", width: 150, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn", cellClass: (p) => (p.value != null && p.data.client_diff < 0 ? "cell-promo" : ""), headerTooltip: "Какая будет цена для покупателя, если вступить в самую выгодную акцию. Двойной щелчок отправляет эту цену в WB (скидка подберётся сама)" },
       { headerName: "Разница, ₽", field: "client_diff", width: 100, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), cellClass: signClass, type: "numericColumn", headerTooltip: "Минус: цена для клиента понижается" },
       { headerName: "Разница, %", field: "client_diff_pct", width: 100, valueFormatter: (p) => (p.value == null ? "—" : pct(p)), cellClass: signClass, type: "numericColumn" },
       { headerName: "Акция", field: "promo_best_name", width: 150, valueFormatter: (p) => (p.value == null ? "" : p.value) },
@@ -342,6 +342,7 @@ const productsGrid = agGrid.createGrid(document.getElementById("grid-products"),
     (!onlyLoss || ["loss", "risk"].includes(n.data.status)) && (!onlyChanged || n.data.calc_price !== null),
   stopEditingWhenCellsLoseFocus: true,
   onCellValueChanged: saveCell,
+  onCellDoubleClicked: sendPromoPrice,
 });
 
 applyColumnPrefs(loadColumnPrefs());
@@ -622,6 +623,47 @@ document.getElementById("btn-confirm").addEventListener("dblclick", async (e) =>
     pending = null;
   }
 });
+
+// Двойной щелчок по «Рекомендуемой цене для клиента (акция)» отправляет её в WB (скидка подбирается сама)
+const promoSendDialog = document.getElementById("promo-send-dialog");
+const promoNoAsk = () => { try { return localStorage.getItem("torpeda.promoNoAsk") === "1"; } catch { return false; } };
+let promoBusy = false;
+
+async function sendPromoPrice(e) {
+  if (e.colDef.field !== "client_promo" || promoBusy) return;
+  const r = e.data;
+  if (r.client_promo == null || !(r.client_diff < 0)) return;
+  promoBusy = true;
+  try {
+    const prev = await api("POST", "/api/prices/preview", { promo_nm_ids: [r.nm_id] });
+    if (!prev.items.length) return setStatus(`${r.nm_id}: цена уже стоит, отправлять нечего`);
+    const text = `Артикул ${r.nm_id}: ${r.client_now} ₽ → ${r.client_promo} ₽ (${r.client_diff_pct}%), маржа ${rub({ value: num(prev.items[0].after.profit) })}. Отправить?`;
+    if (!promoNoAsk()) {
+      document.getElementById("promo-send-text").textContent = text;
+      document.getElementById("promo-send-noask").checked = false;
+      const yes = await new Promise((resolve) => {
+        const done = (v) => { promoSendDialog.close(); resolve(v); };
+        document.getElementById("promo-send-yes").onclick = () => done(true);
+        document.getElementById("promo-send-cancel").onclick = () => done(false);
+        promoSendDialog.addEventListener("cancel", () => resolve(false), { once: true });
+        promoSendDialog.showModal();
+      });
+      if (!yes) return;
+      if (document.getElementById("promo-send-noask").checked) {
+        try { localStorage.setItem("torpeda.promoNoAsk", "1"); } catch { /* без запоминания будет спрашивать */ }
+      }
+    }
+    const items = prev.items.map(({ nm_id, old_price, old_discount, new_price, new_discount }) => ({ nm_id, old_price, old_discount, new_price, new_discount }));
+    const res = await api("POST", "/api/prices/send", { items, confirm_token: prev.confirm_token });
+    setStatus(res.status === "sent" ? `Артикул ${r.nm_id}: цена ${r.client_promo} ₽ отправлена в WB, задача ${res.wb_task_id}. Запись в «Журнале цен».` : `Артикул ${r.nm_id}: WB не принял цену: ${res.error}`);
+    if (res.status !== "sent") alert("WB не принял цену: " + res.error);
+    await loadProducts();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    promoBusy = false;
+  }
+}
 
 // --- журнал ---
 
