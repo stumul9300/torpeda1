@@ -416,3 +416,20 @@ DEFAULT_SETTINGS = {
     "revert_exclude": "",  # артикулы WB через запятую, которым цену не возвращать
     "report_days": "30",  # за сколько дней брать фактическую логистику и хранение
 }
+
+
+class EntryPoint(Base):
+    """Строка отчёта WB «Аналитика → Точки входа»: откуда покупатели приходят в карточку.
+
+    Набор колонок отчёта WB может меняться, поэтому показатели лежат как есть (JSON: название колонки → число)."""
+
+    __tablename__ = "entry_points"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    nm_id: Mapped[int] = mapped_column(Integer, index=True)
+    point: Mapped[str] = mapped_column(String(200))  # точка входа (поиск, каталог, рекомендации…)
+    day: Mapped[date | None] = mapped_column(Date)  # день, если в отчёте есть дата
+    metrics: Mapped[str] = mapped_column(Text)
+    source_file: Mapped[str | None] = mapped_column(String(300))
+    loaded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
