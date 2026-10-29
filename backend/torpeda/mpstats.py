@@ -26,11 +26,13 @@ from typing import Any
 import httpx
 from dotenv import dotenv_values
 
-from torpeda.config import BACKEND_DIR, DATA_DIR, clean_key
+from torpeda import config
+from torpeda.config import BACKEND_DIR, DATA_DIR, clean_key, read_keys_file
 
 BASE = "https://mpstats.io/api/analytics/v1/wb"
 DEFAULT_SKUS = (1803104278, 482235433, 955259665, 482235434, 1803104279)
 OUT_DIR = DATA_DIR / "mpstats"
+KEY_NAME = "mpstats"  # ключ в keys.json рядом с ключами WB
 
 # Имена полей в ответах MPSTATS менялись между версиями API: берём первое найденное.
 DATE_KEYS = ("data", "date", "day")
@@ -45,8 +47,26 @@ class MpstatsError(RuntimeError):
     pass
 
 
+def saved_token() -> str:
+    """Токен, сохранённый в программе (вкладка «Настройки»): лежит рядом с ключами WB, на этом компьютере."""
+    return clean_token(read_keys_file().get(KEY_NAME, ""))
+
+
+def save_token(value: str) -> None:
+    """Сохраняет токен из интерфейса. Пустая строка удаляет."""
+    keys = read_keys_file()
+    if value := clean_token(value):
+        keys[KEY_NAME] = value
+    else:
+        keys.pop(KEY_NAME, None)
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    config.KEYS_FILE.write_text(json.dumps(keys), encoding="utf-8")
+
+
 def token_source() -> tuple[str, str]:
-    """Токен и откуда он взят: переменная окружения важнее файла, как и для ключей WB."""
+    """Токен и откуда он взят: сохранённый в программе важнее .env и переменной окружения, как и для ключей WB."""
+    if saved := saved_token():
+        return saved, "программа (вкладка «Настройки»)"
     env_file = BACKEND_DIR / ".env"
     from_file = clean_token(dotenv_values(env_file, encoding="utf-8-sig").get("MPSTATS_TOKEN") or "")
     from_env = clean_token(os.getenv("MPSTATS_TOKEN", ""))
@@ -55,6 +75,34 @@ def token_source() -> tuple[str, str]:
     if from_file:
         return from_file, f"файл {env_file}"
     return "", ""
+
+
+def check_token() -> dict[str, Any]:
+    """Живая проверка: остаток запросов по тарифу. Возвращает понятный итог для интерфейса, токен не показывает."""
+    value, source = token_source()
+    if not value:
+        return {"ok": False, "text": "Токен не задан: вставьте его в поле и нажмите «Сохранить»."}
+    headers = {"X-Mpstats-TOKEN": value, "Content-Type": "application/json"}
+    try:
+        resp = httpx.get("https://mpstats.io/api/user/report_api_limit", headers=headers, timeout=30)
+    except httpx.HTTPError as exc:
+        return {"ok": False, "text": f"Нет связи с MPSTATS: {exc}"}
+    if resp.status_code == 200:
+        data = resp.json() if resp.content else {}
+        available, used = num(data.get("available")), num(data.get("use"))
+        left = (
+            f", осталось запросов {available - used:.0f} из {available:.0f}"
+            if available is not None and used is not None
+            else ""
+        )
+        return {"ok": True, "text": f"Токен принят (…{value[-4:]}, {source}){left}."}
+    if resp.status_code == 401:
+        return {
+            "ok": False,
+            "text": "MPSTATS не принял токен (401). Скопируйте его заново целиком на mpstats.io в «Личном кабинете», "
+            f"блок «API токен». Сейчас {describe(value, source)}.",
+        }
+    return {"ok": False, "text": f"MPSTATS ответил {resp.status_code}: {resp.text[:200]}"}
 
 
 def clean_token(value: str) -> str:

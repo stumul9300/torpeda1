@@ -76,3 +76,25 @@ def test_401_message_names_source_not_token(monkeypatch, tmp_path):
     assert "переменная окружения" in str(exc.value)
     assert "длина 16" in str(exc.value)
     assert "secret" not in str(exc.value)
+
+
+def test_saved_token_wins_and_is_checked(api, monkeypatch, tmp_path):
+    monkeypatch.setattr(mpstats.config, "KEYS_FILE", tmp_path / "keys.json")
+    monkeypatch.setattr(mpstats.config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(mpstats, "BACKEND_DIR", tmp_path)
+    monkeypatch.setenv("MPSTATS_TOKEN", "from.env.0000")
+    seen = []
+
+    def fake_get(url, headers, timeout):
+        seen.append(headers["X-Mpstats-TOKEN"])
+        return httpx.Response(200, json={"available": 2500, "use": 38})
+
+    monkeypatch.setattr(mpstats.httpx, "get", fake_get)
+    res = api.put("/api/mpstats/key", json={"token": " abc.def.9876 "})
+    body = res.json()
+    assert body["ok"] and "осталось запросов 2462" in body["text"]
+    assert body["tail"] == "9876" and "программа" in body["source"]
+    assert seen == ["abc.def.9876"]
+    assert "abc.def" not in res.text
+    api.put("/api/mpstats/key", json={"token": ""})
+    assert api.get("/api/mpstats/key").json()["source"].startswith("переменная окружения")
