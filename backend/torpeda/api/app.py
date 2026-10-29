@@ -17,7 +17,18 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from torpeda import __version__, config, costs_excel, diagnose, mpstats, pricing, promo_import, services, updater
+from torpeda import (
+    __version__,
+    autopromo,
+    config,
+    costs_excel,
+    diagnose,
+    mpstats,
+    pricing,
+    promo_import,
+    services,
+    updater,
+)
 from torpeda.calc import UnitInput, calculate, price_for_target_margin
 from torpeda.calc.unit_economics import price_before_discount_for
 from torpeda.config import BACKEND_DIR, clean_key, get_settings, key_source, masked_keys, save_keys
@@ -27,6 +38,7 @@ from torpeda.db.models import (
     CostPrice,
     Order,
     Price,
+    PriceAlert,
     Product,
     Promotion,
     PromotionItem,
@@ -45,6 +57,7 @@ from torpeda.sync import (
     sync_funnel,
     sync_orders,
     sync_paid_storage,
+    sync_prices,
     sync_report,
     sync_sales,
     sync_site_prices,
@@ -695,6 +708,7 @@ class ChangeModel(BaseModel):
 class PreviewRequest(BaseModel):
     nm_ids: list[int] | None = None  # None — все товары с расчётной ценой
     revert_change_ids: list[int] | None = None  # вернуть цены до этих отправок
+    revert_alert_ids: list[int] | None = None  # вернуть цены до этих изменений WB (автоакции)
 
 
 class SendRequest(BaseModel):
@@ -704,7 +718,9 @@ class SendRequest(BaseModel):
 
 @app.post("/api/prices/preview")
 def prices_preview(req: PreviewRequest, s: Session = Depends(get_session)) -> dict:
-    if req.revert_change_ids:
+    if req.revert_alert_ids:
+        changes = autopromo.changes_for_alerts(s, req.revert_alert_ids)
+    elif req.revert_change_ids:
         changes = pricing.changes_for_revert(s, req.revert_change_ids)
     else:
         changes = pricing.changes_from_calc_prices(s, req.nm_ids)
@@ -722,6 +738,31 @@ def prices_send(
         return pricing.send(s, client, [i.to_change() for i in req.items], req.confirm_token)
     except pricing.PricingError as e:
         raise HTTPException(409, str(e)) from e
+
+
+@app.get("/api/price-alerts")
+def price_alerts(s: Session = Depends(get_session)) -> list[dict]:
+    return autopromo.alerts(s)
+
+
+@app.post("/api/prices/check")
+def prices_check(
+    s: Session = Depends(get_session),
+    client: WBClient = Depends(get_wb_client),
+    prices_client: WBClient = Depends(get_wb_prices_client),
+) -> dict:
+    """Сверяет цены с WB: замечает понижения (автоакции) и, если включено, возвращает прежние цены."""
+    try:
+        n = sync_prices(client, s)
+        s.commit()
+        reverted = autopromo.revert_pending(s, prices_client) if autopromo.enabled(s) else None
+    except WBError as e:
+        raise HTTPException(502, str(e)) from e
+    return {
+        "prices": n,
+        "revert": reverted,
+        "new_alerts": s.scalar(select(func.count()).select_from(PriceAlert).where(PriceAlert.status == "new")),
+    }
 
 
 @app.get("/api/prices/history")

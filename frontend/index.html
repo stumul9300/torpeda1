@@ -153,7 +153,15 @@
   </section>
 
   <section id="tab-history" class="panel">
-    <div class="toolbar"><button id="btn-history-refresh">Обновить</button></div>
+    <div class="toolbar">
+      <button id="btn-history-refresh">Обновить</button>
+      <button id="btn-price-check">Проверить цены в WB сейчас</button>
+      <label><input type="checkbox" id="revert-autopromo"> Возвращать цену после автоакций WB</label>
+    </div>
+    <p class="hint">Пока программа открыта, раз в 10 минут цены сверяются с WB. Если WB сам понизил цену (автоакция), ниже появится строка «было → стало». Галочка включает автоматический возврат прежней цены; без неё можно вернуть кнопкой в строке. Возврат не чаще 3 раз в сутки на товар. Работает только пока Торпеда запущена; чтобы WB не менял цену вообще, исключите товар из автоакции в кабинете WB.</p>
+    <h2>Изменения цен самим WB</h2>
+    <div id="grid-alerts" class="ag-theme-quartz grid" style="height:220px"></div>
+    <h2>Журнал отправленных цен</h2>
     <div id="grid-history" class="ag-theme-quartz grid"></div>
   </section>
 

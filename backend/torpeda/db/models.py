@@ -263,6 +263,24 @@ class PriceChange(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class PriceAlert(Base):
+    """Цена в WB изменилась не нашей отправкой (обычно автоакция): было → стало, и что с этим сделали."""
+
+    __tablename__ = "price_alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    nm_id: Mapped[int] = mapped_column(Integer, index=True)
+    old_price: Mapped[Decimal] = mapped_column(Money)
+    old_discount_pct: Mapped[Decimal] = mapped_column(Percent)
+    new_price: Mapped[Decimal] = mapped_column(Money)
+    new_discount_pct: Mapped[Decimal] = mapped_column(Percent)
+    status: Mapped[str] = mapped_column(String(20), default="new")  # new / reverted / skipped / error
+    note: Mapped[str | None] = mapped_column(String(500))
+    detected_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    reverted_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class FunnelRow(Base):
     """Воронка продаж по карточке за период (переходы → корзина → заказы → выкупы). WB считает сам за период."""
 
@@ -394,5 +412,7 @@ DEFAULT_SETTINGS = {
     "tax_pct": "7",  # налог от суммы продажи
     "acquiring_pct": "",  # пусто = брать фактический из отчётов
     "risk_margin_pct": "10",  # порог «зоны риска» по маржинальности
+    "revert_autopromo": "0",  # 1 = возвращать цену, если WB сам понизил её (автоакция)
+    "revert_exclude": "",  # артикулы WB через запятую, которым цену не возвращать
     "report_days": "30",  # за сколько дней брать фактическую логистику и хранение
 }
