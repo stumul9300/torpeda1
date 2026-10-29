@@ -160,8 +160,8 @@ const productColumns = [
       { headerName: "Цена до скидки", field: "price", width: 110, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Скидка", field: "discount_pct", width: 80, valueFormatter: pct, type: "numericColumn" },
       { headerName: "Цена продавца", field: "cur_seller_price", width: 110, valueFormatter: rub, type: "numericColumn" },
-      { headerName: "СПП", field: "spp", width: 110, cellRenderer: sppCell, type: "numericColumn", headerTooltip: "СПП из самого свежего заказа и время этого заказа. WB отдаёт СПП только по сделанным заказам" },
-      { headerName: "Цена на сайте (Москва)", field: "site_price", width: 130, cellRenderer: sitePriceCell, type: "numericColumn", headerTooltip: "Цена для покупателя в Москве на сайте WB. Обновляется кнопкой «Обновить цены на сайте»" },
+      { headerName: "СПП", field: "spp", width: 110, cellRenderer: sppCell, type: "numericColumn", headerTooltip: "Справочно. СПП из самого свежего заказа и время этого заказа. WB отдаёт СПП только по сделанным заказам" },
+      { headerName: "Цена на сайте (Москва)", field: "site_price", width: 130, cellRenderer: sitePriceCell, type: "numericColumn", headerTooltip: "Справочно. Цена для покупателя в Москве на сайте WB. Обновляется кнопкой «Обновить цены на сайте»" },
       { headerName: "Цена с СПП", field: "buyer_price", width: 100, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn" },
       { headerName: "Комиссия", field: "cur_commission", width: 100, valueFormatter: rub, type: "numericColumn" },
       { headerName: "Логистика", field: "cur_logistics", width: 100, valueFormatter: rub, type: "numericColumn" },
@@ -317,6 +317,24 @@ document.getElementById("search").addEventListener("input", (e) => productsGrid.
 document.getElementById("hide-no-stock").addEventListener("change", (e) => { hideNoStock = e.target.checked; productsGrid.onFilterChanged(); });
 document.getElementById("only-loss").addEventListener("change", (e) => { onlyLoss = e.target.checked; productsGrid.onFilterChanged(); });
 document.getElementById("only-changed").addEventListener("change", (e) => { onlyChanged = e.target.checked; productsGrid.onFilterChanged(); });
+
+// --- окно «Акции WB» ---
+
+const promoDialog = document.getElementById("promo-dialog");
+document.getElementById("btn-promo-list").addEventListener("click", async () => {
+  const list = await api("GET", "/api/promotions");
+  const noList = list.filter((p) => !p.items_total).length;
+  document.getElementById("promo-hint").textContent = list.length
+    ? `Загружено акций: ${list.length}. По ${noList} из них WB не отдаёт список товаров (в основном автоакции), поэтому цену для вступления программа посчитать не может. По остальным WB показывает только товары, приглашённые в акцию.`
+    : "Акции ещё не загружены: нажмите синхронизацию в «Настройках».";
+  const dt = (v) => (v ? new Date(v).toLocaleDateString("ru-RU") : "—");
+  document.getElementById("promo-body").innerHTML = list.map((p) => `<tr>
+    <td>${esc(p.name)}</td><td>${p.type === "auto" ? "авто" : esc(p.type || "обычная")}</td>
+    <td>${dt(p.start_at)} — ${dt(p.end_at)}</td>
+    <td>${p.items_total || "WB не отдаёт список"}</td><td>${p.items_total ? p.items_in_action : "—"}</td></tr>`).join("");
+  promoDialog.showModal();
+});
+document.getElementById("promo-close").addEventListener("click", () => promoDialog.close());
 
 // --- окно «Колонки» ---
 

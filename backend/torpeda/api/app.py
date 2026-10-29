@@ -29,6 +29,7 @@ from torpeda.db.models import (
     Price,
     Product,
     Promotion,
+    PromotionItem,
     ReportRow,
     Setting,
     SyncLog,
@@ -283,7 +284,29 @@ def recalc_prices_by_promos(s: Session = Depends(get_session)) -> dict:
 @app.get("/api/promotions")
 def list_promotions(s: Session = Depends(get_session)) -> list[dict]:
     promos = s.query(Promotion).filter(Promotion.account_id == ACC).order_by(Promotion.start_at).all()
-    return [{"id": p.id, "name": p.name, "type": p.type, "start_at": p.start_at, "end_at": p.end_at} for p in promos]
+    counts = {
+        pid: (total, invited)
+        for pid, total, invited in s.query(
+            PromotionItem.promotion_id,
+            func.count(),
+            func.coalesce(func.sum(PromotionItem.in_action), 0),
+        )
+        .filter(PromotionItem.account_id == ACC)
+        .group_by(PromotionItem.promotion_id)
+        .all()
+    }
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "type": p.type,
+            "start_at": p.start_at,
+            "end_at": p.end_at,
+            "items_total": counts.get(p.id, (0, 0))[0],
+            "items_in_action": int(counts.get(p.id, (0, 0))[1]),
+        }
+        for p in promos
+    ]
 
 
 @app.get("/api/promotions/{promotion_id}")
