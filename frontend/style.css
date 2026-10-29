@@ -21,6 +21,9 @@ button:disabled { opacity: .5; cursor: default; }
 .grid-small { height: 50vh; width: 100%; }
 .row-loss { background: #fdecea !important; }
 .row-risk { background: #fff8e1 !important; }
+/* выбранная строка заметна и поверх красной/жёлтой подсветки */
+.ag-theme-quartz .ag-row.ag-row-selected, .ag-theme-quartz .ag-row.ag-row-selected .ag-cell { background: #cfe3ff !important; }
+.ag-theme-quartz .ag-row.ag-row-selected { box-shadow: inset 4px 0 0 #1a73e8; }
 .cell-edit { background: #f3f9ff; }
 .neg { color: #c62828; font-weight: 600; }
 .pos { color: #2e7d32; }

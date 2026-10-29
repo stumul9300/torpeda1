@@ -244,6 +244,7 @@ const productsGrid = agGrid.createGrid(document.getElementById("grid-products"),
   suppressColumnVirtualisation: true,
   localeText: RU,
   getRowId: (p) => String(p.data.nm_id),
+  rowSelection: "single",
   rowClassRules: {
     "row-loss": (p) => p.data?.status === "loss",
     "row-risk": (p) => p.data?.status === "risk",
@@ -583,6 +584,7 @@ const promoGrid = agGrid.createGrid(document.getElementById("grid-promo"), {
   ],
   defaultColDef: { sortable: true, filter: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true },
   localeText: RU,
+  rowSelection: "single",
   rowClassRules: { "row-loss": (p) => p.data.promo?.status === "loss", "row-risk": (p) => p.data.promo?.status === "risk" },
 });
 
