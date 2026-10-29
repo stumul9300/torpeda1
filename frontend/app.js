@@ -218,7 +218,7 @@ const productColumns = [
   {
     headerName: "Новая цена (расчёт)",
     children: [
-      { headerName: "Желаемая цена на сайте", field: "target_site_price", width: 130, valueFormatter: rub, ...editable, cellClass: "cell-edit cell-target", headerTooltip: "Введите цену, которую хотите видеть на сайте (как «Цена с СПП»): программа подберёт цену до скидки и покажет, на сколько изменятся цена и маржа" },
+      { headerName: "Желаемая цена на сайте", field: "target_site_price", width: 130, valueFormatter: rub, ...editable, cellClass: "cell-edit cell-target", headerTooltip: "Введите цену, которую хотите видеть на сайте (как «Цена с СПП»). Цена до скидки не меняется, программа подберёт целую скидку и покажет, на сколько изменятся цена и маржа" },
       { headerName: "Новая цена до скидки", field: "calc_price", width: 130, valueFormatter: rub, ...editable, headerTooltip: "Цена до скидки, а не цена на сайте. Чтобы ввести цену, которую увидит покупатель, пользуйтесь «Желаемой ценой на сайте»" },
       { headerName: "Новая скидка", field: "calc_discount_pct", width: 100, valueFormatter: pct, ...editable },
       { headerName: "Цена продавца", field: "calc_seller_price", width: 110, valueFormatter: rub, type: "numericColumn" },
@@ -332,16 +332,15 @@ async function saveCell(e) {
       if (value === null) return;
       await api("PUT", `/api/products/${nm}/cost`, { cost: value });
     } else if (e.colDef.field === "target_site_price") {
-      // цену на сайте напрямую не поменять: подбираем цену до скидки при той же скидке и нынешней разнице с сайтом
+      // цена до скидки остаётся нынешней, меняется только скидка (WB принимает целые %): берём ближайшую к желаемой цене
       if (value === null) {
         await api("PUT", `/api/products/${nm}/calc-price`, { price: null, discount_pct: null });
       } else {
-        // разница между ценой продавца и ценой для покупателя: по цене на сайте, а если её нет, по СПП
-        const k = e.data.site_k;
+        const k = e.data.site_k; // во сколько раз цена на сайте отличается от цены продавца
         if (!k) throw new Error("Нет ни цены на сайте, ни СПП: нажмите «Обновить цены на сайте» или «Обновить СПП».");
-        const disc = e.data.calc_discount_pct ?? e.data.discount_pct ?? 0;
-        const price = Math.round(value / k / (1 - disc / 100));
-        await api("PUT", `/api/products/${nm}/calc-price`, { price, discount_pct: e.data.calc_discount_pct });
+        if (!e.data.price) throw new Error("Нет нынешней цены товара из WB: нажмите «Загрузить из WB».");
+        const discount = Math.min(99, Math.max(0, Math.round(100 * (1 - value / k / e.data.price))));
+        await api("PUT", `/api/products/${nm}/calc-price`, { price: e.data.price, discount_pct: discount });
       }
     } else {
       await api("PUT", `/api/products/${nm}/calc-price`, {
