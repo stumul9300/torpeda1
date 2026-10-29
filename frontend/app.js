@@ -375,12 +375,13 @@ const promoDialog = document.getElementById("promo-dialog");
 document.getElementById("btn-promo-list").addEventListener("click", async () => {
   const list = await api("GET", "/api/promotions");
   const noList = list.filter((p) => !p.items_total).length;
+  const fromFiles = list.filter((p) => p.from_file).length;
   document.getElementById("promo-hint").textContent = list.length
-    ? `Загружено акций: ${list.length}. По ${noList} из них WB не отдаёт список товаров (в основном автоакции), поэтому цену для вступления программа посчитать не может. По остальным WB показывает только товары, приглашённые в акцию.`
+    ? `Загружено акций: ${list.length}, из них из файлов: ${fromFiles}${fromFiles ? "" : " (файлы акций ещё не загружены: кнопка «Загрузить акции из файлов…»)"}. По ${noList} из них WB не отдаёт список товаров (в основном автоакции), поэтому цену для вступления программа посчитать не может. По остальным WB показывает только товары, приглашённые в акцию.`
     : "Акции ещё не загружены: нажмите синхронизацию в «Настройках».";
   const dt = (v) => (v ? new Date(v).toLocaleDateString("ru-RU") : "—");
   document.getElementById("promo-body").innerHTML = list.map((p) => `<tr>
-    <td>${esc(p.name)}</td><td>${p.type === "auto" ? "авто" : esc(p.type || "обычная")}</td>
+    <td>${esc(p.name)}${p.from_file ? " (файл)" : ""}</td><td>${p.type === "auto" ? "авто" : esc(p.type || "обычная")}</td>
     <td>${dt(p.start_at)} — ${dt(p.end_at)}</td>
     <td>${p.items_total || "WB не отдаёт список"}</td><td>${p.items_total ? p.items_in_action : "—"}</td></tr>`).join("");
   promoDialog.showModal();
@@ -686,7 +687,7 @@ async function loadPromotion(id) {
 promoSelect.addEventListener("change", () => loadPromotion(promoSelect.value));
 
 const promoFiles = document.getElementById("promo-files");
-document.getElementById("btn-promo-upload").addEventListener("click", () => promoFiles.click());
+for (const id of ["btn-promo-upload", "btn-promo-upload-2"]) document.getElementById(id).addEventListener("click", () => promoFiles.click());
 promoFiles.addEventListener("change", async () => {
   const form = new FormData();
   for (const f of promoFiles.files) form.append("files", f);

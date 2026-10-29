@@ -304,6 +304,7 @@ def list_promotions(s: Session = Depends(get_session)) -> list[dict]:
             "end_at": p.end_at,
             "items_total": counts.get(p.id, (0, 0))[0],
             "items_in_action": int(counts.get(p.id, (0, 0))[1]),
+            "from_file": p.id < 0,
         }
         for p in promos
     ]
