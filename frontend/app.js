@@ -90,7 +90,7 @@ function clientPrices(r) {
   const k = r.site_price && seller ? num(r.site_price) / seller : r.spp != null ? (100 - num(r.spp)) / 100 : null;
   const now = r.site_price ? num(r.site_price) : k && seller ? Math.round(seller * k) : null;
   const best = r.promo_best;
-  const plan = best && !best.in_action ? num(best.plan_seller_price) : null;
+  const plan = best ? num(best.plan_seller_price) : null;
   const promo = plan != null && k ? Math.round(plan * k) : null;
   const diff = promo != null && now != null ? promo - now : null;
   const loss = best?.status === "loss" ? ", убыток" : "";
@@ -232,7 +232,7 @@ const productColumns = [
     headerName: "Цена для клиента и акция",
     children: [
       { headerName: "Цена для клиента сейчас", field: "client_now", width: 120, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn", headerTooltip: "Цена на сайте для покупателя (с СПП). Если цены на сайте нет, считается по СПП" },
-      { headerName: "Рекомендуемая цена для клиента (акция)", field: "client_promo", width: 150, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn", cellClass: (p) => (p.value != null && p.data.client_diff < 0 ? "cell-promo" : ""), headerTooltip: "Какая будет цена для покупателя, если вступить в самую выгодную акцию. Двойной щелчок отправляет эту цену в WB (скидка подберётся сама)" },
+      { headerName: "Мин. вход в акцию: цена для клиента", field: "client_promo", width: 150, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), type: "numericColumn", cellClass: (p) => (p.value != null ? "cell-entry" : ""), headerTooltip: "Самая высокая цена для покупателя, при которой товар проходит в самую выгодную акцию (минимальный вход). Если у вас цена ниже или равна, менять её не нужно. Двойной щелчок отправляет эту цену в WB (скидка подберётся сама)" },
       { headerName: "Маржа по этой цене, ₽", field: "client_profit", width: 110, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), cellClass: signClass, type: "numericColumn", headerTooltip: "Маржа в рублях, если поставить рекомендуемую цену" },
       { headerName: "Маржа по этой цене, %", field: "client_margin", width: 110, valueFormatter: (p) => (p.value == null ? "—" : pct(p)), cellClass: signClass, type: "numericColumn" },
       { headerName: "Разница, ₽", field: "client_diff", width: 100, valueFormatter: (p) => (p.value == null ? "—" : rub(p)), cellClass: signClass, type: "numericColumn", headerTooltip: "Минус: цена для клиента понижается" },
