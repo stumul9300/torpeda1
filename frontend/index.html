@@ -37,11 +37,12 @@
       <label><input type="checkbox" id="only-loss"> Только убыточные и зона риска</label>
       <label><input type="checkbox" id="only-changed"> Только с новой ценой</label>
       <span class="spacer"></span>
-      <span id="summary"></span>
+      <span id="summary" title="Справочно: считается по таблице ниже, цены в WB не меняет"></span>
       <button id="btn-spp" type="button">Обновить СПП</button>
       <button id="btn-site-prices" type="button">Обновить цены на сайте</button>
-      <label title="Пока программа открыта"><input type="checkbox" id="spp-hourly"> СПП и цены на сайте каждый час</label>
+      <label title="Справочно: СПП и цена на сайте нужны только для просмотра и не влияют на расчёт. Обновляются раз в час, пока программа открыта"><input type="checkbox" id="spp-hourly"> СПП и цены на сайте каждый час</label>
       <button id="btn-recalc-promos" type="button" title="Заполнить «Новую цену» ценами для вступления в самые выгодные акции">Пересчитать цены по акциям</button>
+      <button id="btn-promo-list" type="button" title="Все акции WB, которые загрузила программа">Акции WB…</button>
       <button id="btn-columns" type="button">Колонки…</button>
       <button id="btn-bulk-cost" type="button">Себестоимость всем…</button>
       <button id="btn-preview" class="primary">Отправить новые цены в WB…</button>
@@ -237,6 +238,13 @@
       <button type="submit" class="primary">Сохранить</button>
     </form>
   </section>
+
+  <dialog id="promo-dialog">
+    <h3>Акции WB</h3>
+    <p class="hint" id="promo-hint"></p>
+    <table class="log"><thead><tr><th>Акция</th><th>Тип</th><th>Даты</th><th>Ваших товаров в списке</th><th>Уже участвуют</th></tr></thead><tbody id="promo-body"></tbody></table>
+    <div class="dialog-actions"><button type="button" id="promo-close" class="primary">Закрыть</button></div>
+  </dialog>
 
   <dialog id="columns-dialog">
     <h3>Колонки таблицы товаров</h3>
