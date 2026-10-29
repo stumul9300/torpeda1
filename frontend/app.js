@@ -39,6 +39,7 @@ document.querySelectorAll(".tab").forEach((b) =>
     if (b.dataset.tab === "history") loadHistory();
     if (b.dataset.tab === "reports") loadReport();
     if (b.dataset.tab === "promotions") loadPromotions();
+    if (b.dataset.tab === "entry") loadEntry();
     if (b.dataset.tab === "settings") loadSettings();
   })
 );
@@ -217,9 +218,24 @@ const sitePriceCell = (p) => {
   return span;
 };
 
+// Кнопка в строке товара: открывает вкладку «Точки входа» с этим артикулом
+const entryCell = (p) => {
+  if (!/^\d+$/.test(String(p.data?.nm_id ?? ""))) return "";
+  const b = document.createElement("a");
+  b.href = "#";
+  b.textContent = "точки";
+  b.onclick = (e) => {
+    e.preventDefault();
+    document.getElementById("entry-nm").value = p.data.nm_id;
+    document.querySelector('.tab[data-tab="entry"]').click();
+  };
+  return b;
+};
+
 const productColumns = [
   { headerName: "Фото", field: "photo", pinned: "left", width: 64, sortable: false, filter: false, cellRenderer: photoCell },
   { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, pinned: "left", width: 120 },
+  { headerName: "Точки входа", field: "nm_id", colId: "entry_points", pinned: "left", width: 90, sortable: false, filter: false, cellRenderer: entryCell },
   { headerName: "Арт. продавца", field: "vendor_code", pinned: "left", width: 120 },
   { headerName: "Название", field: "title", width: 200 },
   { headerName: "Бренд", field: "brand", width: 110 },
@@ -845,7 +861,8 @@ for (const id of ["btn-promo-upload", "btn-promo-upload-2"]) document.getElement
 
 const promoResult = document.getElementById("promo-result-dialog");
 document.getElementById("promo-result-close").addEventListener("click", () => promoResult.close());
-function showPromoResult(html) {
+function showPromoResult(html, title = "Акции из файлов") {
+  document.getElementById("promo-result-title").textContent = title;
   document.getElementById("promo-result-body").innerHTML = html;
   promoResult.showModal();
 }
@@ -880,12 +897,61 @@ promoFiles.addEventListener("change", () => {
   uploadPromoFiles(files);
 });
 
-// файлы можно просто бросить мышью в окно программы
+// --- точки входа ---
+
+const entryGrid = agGrid.createGrid(document.getElementById("grid-entry"), {
+  columnDefs: [],
+  defaultColDef: { sortable: true, resizable: true, filter: true },
+  localeText: RU,
+});
+async function loadEntry() {
+  const nm = document.getElementById("entry-nm").value.trim();
+  const data = await api("GET", "/api/entry-points" + (/^\d+$/.test(nm) ? `?nm_id=${nm}` : ""));
+  entryGrid.setGridOption("columnDefs", [
+    { headerName: "Артикул WB", field: "nm_id", cellRenderer: wbLink, width: 120, pinned: "left" },
+    { headerName: "Точка входа", field: "point", width: 220, pinned: "left" },
+    ...data.columns.map((c, i) => ({ headerName: c, field: `m${i}`, type: "numericColumn", width: 150, valueFormatter: (p) => (p.value == null ? "" : Number(p.value).toLocaleString("ru-RU", { maximumFractionDigits: 2 })) })),
+  ]);
+  entryGrid.setGridOption("rowData", data.rows);
+  const period = data.date_from ? ` · период в файлах: ${new Date(data.date_from).toLocaleDateString("ru-RU")} — ${new Date(data.date_to).toLocaleDateString("ru-RU")}` : "";
+  document.getElementById("entry-info").textContent = data.rows.length ? `Строк: ${data.rows.length}${period}` : "Пока ничего не загружено";
+}
+document.getElementById("entry-nm").addEventListener("input", () => loadEntry());
+const entryFiles = document.getElementById("entry-files");
+document.getElementById("btn-entry-upload").addEventListener("click", () => entryFiles.click());
+async function uploadEntryFiles(files) {
+  const xlsx = [...files].filter((f) => /\.xlsx$/i.test(f.name));
+  if (!xlsx.length) return showPromoResult("<p>Нужен файл Excel (.xlsx) из кабинета WB.</p>");
+  const form = new FormData();
+  for (const f of xlsx) form.append("files", f);
+  try {
+    const res = await fetch("/api/entry-points/import", { method: "POST", body: form });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    const data = await res.json();
+    const bad = data.files.filter((f) => f.error);
+    showPromoResult(
+      `<p class="big">Загружено строк: ${data.rows}</p>` +
+        (bad.length ? `<p>Не загрузились:</p><ul>${bad.map((f) => `<li>${esc(f.file)}: ${esc(f.error)}</li>`).join("")}</ul>` : ""),
+      "Точки входа"
+    );
+    await loadEntry();
+  } catch (e) {
+    showPromoResult("<p>Не получилось загрузить отчёт: " + esc(e.message) + "</p>");
+  }
+}
+entryFiles.addEventListener("change", () => {
+  const files = [...entryFiles.files];
+  entryFiles.value = "";
+  uploadEntryFiles(files);
+});
+
+// файлы можно просто бросить мышью в окно программы: на вкладке «Точки входа» это отчёт точек, иначе акции
 window.addEventListener("dragover", (e) => { if (e.dataTransfer?.types?.includes("Files")) e.preventDefault(); });
 window.addEventListener("drop", (e) => {
   if (!e.dataTransfer?.files?.length) return;
   e.preventDefault();
-  uploadPromoFiles(e.dataTransfer.files);
+  if (document.getElementById("tab-entry").classList.contains("active")) uploadEntryFiles(e.dataTransfer.files);
+  else uploadPromoFiles(e.dataTransfer.files);
 });
 
 // --- отчёты ---

@@ -16,6 +16,7 @@
       <button class="tab active" data-tab="products">Товары</button>
       <button class="tab" data-tab="reports">Отчёты</button>
       <button class="tab" data-tab="promotions">Акции</button>
+      <button class="tab" data-tab="entry">Точки входа</button>
       <button class="tab" data-tab="history">Журнал цен</button>
       <button class="tab" data-tab="settings">Настройки</button>
     </nav>
@@ -154,6 +155,18 @@
     <div id="grid-promo" class="ag-theme-quartz grid"></div>
   </section>
 
+  <section id="tab-entry" class="panel">
+    <div class="toolbar">
+      <input id="entry-nm" type="search" placeholder="Артикул WB" inputmode="numeric" size="14">
+      <span id="entry-info"></span>
+      <span class="spacer"></span>
+      <button type="button" id="btn-entry-upload" title="Отчёт «Аналитика → Точки входа» из кабинета WB (xlsx)">Загрузить отчёт «Точки входа»…</button>
+      <input type="file" id="entry-files" accept=".xlsx" multiple hidden>
+    </div>
+    <p class="hint">Откуда покупатели приходят в карточку (поиск, каталог, рекомендации…). WB отдаёт этот отчёт только в кабинете: Аналитика → Точки входа → скачать Excel за нужный период. Загрузите файл сюда (или бросьте мышью в окно, пока открыта эта вкладка). Отчёты за разные периоды можно загружать подряд, данные тех же дней заменяются. Чтобы увидеть точки одного товара, введите артикул или нажмите «точки» в строке товара на вкладке «Товары».</p>
+    <div id="grid-entry" class="ag-theme-quartz grid"></div>
+  </section>
+
   <section id="tab-history" class="panel">
     <div class="toolbar">
       <button id="btn-history-refresh">Обновить</button>
@@ -255,7 +268,7 @@
   </section>
 
   <dialog id="promo-result-dialog">
-    <h3>Акции из файлов</h3>
+    <h3 id="promo-result-title">Акции из файлов</h3>
     <div id="promo-result-body"></div>
     <div class="dialog-actions"><button type="button" id="promo-result-close" class="primary">Понятно</button></div>
   </dialog>

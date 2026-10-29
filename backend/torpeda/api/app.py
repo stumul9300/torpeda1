@@ -23,6 +23,7 @@ from torpeda import (
     config,
     costs_excel,
     diagnose,
+    entry_points,
     mpstats,
     pricing,
     promo_import,
@@ -326,6 +327,16 @@ def list_promotions(s: Session = Depends(get_session)) -> list[dict]:
 @app.post("/api/promotions/import")
 async def import_promotions(files: list[UploadFile], s: Session = Depends(get_session)) -> dict:
     return promo_import.import_files(s, [(f.filename or "", await f.read()) for f in files])
+
+
+@app.post("/api/entry-points/import")
+async def import_entry_points(files: list[UploadFile], s: Session = Depends(get_session)) -> dict:
+    return entry_points.import_files(s, [(f.filename or "", await f.read()) for f in files])
+
+
+@app.get("/api/entry-points")
+def entry_points_summary(nm_id: int | None = None, s: Session = Depends(get_session)) -> dict:
+    return entry_points.summary(s, nm_id)
 
 
 @app.get("/api/promotions-best")
